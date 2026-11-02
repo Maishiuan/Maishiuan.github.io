@@ -583,14 +583,12 @@
         const kidGroup = new THREE.Group();
         kidGroup.position.set(x, 0, z);
 
-        // 身體 (圓柱服裝)
         const bodyGeo = new THREE.CylinderGeometry(0.4, 0.5, 1.2, 6);
         const bodyMat = new THREE.MeshStandardMaterial({ color: kidColors[i], roughness: 0.7, flatShading: true });
         const body = new THREE.Mesh(bodyGeo, bodyMat);
         body.position.y = 0.6;
         kidGroup.add(body);
 
-        // 頭部 (球體)
         const headGeo = new THREE.SphereGeometry(0.45, 8, 8);
         const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.6, flatShading: true });
         const head = new THREE.Mesh(headGeo, headMat);
@@ -602,7 +600,7 @@
         kidsGroup.push(kidGroup);
       }
 
-      // 漫步小柴犬 (精緻拼裝造型)
+      // 漫步小柴犬
       const dogGroup = new THREE.Group();
       const dogBodyGeo = new THREE.BoxGeometry(0.7, 0.4, 0.4);
       const dogMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 });
@@ -737,7 +735,7 @@
       badgeText.innerText = `${currentStudent.group} ${currentStudent.name}`;
       const exist = classRecords.find(r => r.studentId === currentStudent.id && r.date === getTodayDateStr());
       if (exist) {
-        btnText.innerText = `已記錄 (點擊更新心情)`;
+        btnText.innerText = `已記錄 ${currentStudent.name} (點擊更新)`;
       } else {
         btnText.innerText = `記錄 ${currentStudent.name} 的心情卡`;
       }
