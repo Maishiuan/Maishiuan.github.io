@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>班級情緒島 - 3D 沉浸式體驗</title>
+  <title>班級情緒島 - 3D 沉浸式雲端同步平台</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -34,7 +34,7 @@
     }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-800 overflow-hidden w-screen h-screen relative">
+<body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
 
   <!-- 3D 渲染畫布容器 -->
   <div id="canvas-container" class="absolute inset-0 z-0"></div>
@@ -82,7 +82,7 @@
         <span id="checkin-btn-text">記錄今天的心情卡</span>
         <i data-lucide="sparkles" class="w-4 h-4"></i>
       </button>
-      <button onclick="resetCameraView()" class="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 flex items-center justify-center text-slate-700 hover:bg-slate-100 transition" title="重置島嶼居重視角">
+      <button onclick="resetCameraView()" class="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 flex items-center justify-center text-slate-700 hover:bg-slate-100 transition" title="重置島嶼視角">
         <i data-lucide="compass" class="w-5 h-5"></i>
       </button>
     </div>
@@ -90,9 +90,9 @@
 
   <!-- 3D 視角操作引導 -->
   <div class="absolute bottom-6 left-6 z-20 pointer-events-none hidden md:block">
-    <div class="bg-black/30 backdrop-blur-sm text-white/80 text-[11px] px-3 py-1.5 rounded-xl flex items-center gap-2">
+    <div class="bg-slate-900/40 backdrop-blur-sm text-white text-[11px] px-3.5 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
       <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
-      <span>拖曳滑鼠 360° 旋轉島嶼，滾輪縮放視角</span>
+      <span>拖曳滑鼠 360° 旋轉島嶼，滾輪可縮放視角</span>
     </div>
   </div>
 
@@ -487,14 +487,327 @@
     }
 
     /* ==========================================================
-       4. 原始精緻 3D 浮空島嶼造景
+       4. 精緻圓潤黏土風 3D 浮空島嶼（動森級 Q版小人、立體柴犬、豐盛大樹）
        ========================================================== */
-    let scene, camera, renderer, islandGroup, treeGem;
+    let scene, camera, renderer, islandGroup, treeGem, gemHalo;
     let kidsGroup = [];
-    let dogMesh;
+    let shibaDog = null;
     let cloudsGroup = [];
+    let floatingParticles = [];
     let isDragging = false, prevMouseX = 0, prevMouseY = 0;
-    let targetRotationY = 0.4, targetRotationX = 0.22;
+    let targetRotationY = 0.35, targetRotationX = 0.22;
+    let cameraDistance = 40;
+
+    // 輔助函式：建立圓潤膠囊體 (相容 Three.js r128)
+    function createRoundedLimb(radius, length, material) {
+      const group = new THREE.Group();
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 20), material);
+      const top = new THREE.Mesh(new THREE.SphereGeometry(radius, 20, 16), material);
+      top.position.y = length / 2;
+      const bot = new THREE.Mesh(new THREE.SphereGeometry(radius, 20, 16), material);
+      bot.position.y = -length / 2;
+      cyl.castShadow = true; top.castShadow = true; bot.castShadow = true;
+      group.add(cyl, top, bot);
+      return group;
+    }
+
+    // 建立精緻 Q 版小人偶（圓潤臉龐、腮紅、髮型、揮手動作）
+    function createCuteKid(config) {
+      const kid = new THREE.Group();
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xffe4d6, roughness: 0.45 });
+      const dressMat = new THREE.MeshStandardMaterial({ color: config.shirtColor, roughness: 0.55 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: config.hairColor, roughness: 0.65 });
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+      const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const blushMat = new THREE.MeshBasicMaterial({ color: 0xfb7185, transparent: true, opacity: 0.55 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
+
+      // 腳底柔和草地光圈
+      const shadowPad = new THREE.Mesh(
+        new THREE.CircleGeometry(0.68, 24),
+        new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.55 })
+      );
+      shadowPad.rotation.x = -Math.PI / 2;
+      shadowPad.position.y = 0.02;
+      kid.add(shadowPad);
+
+      // 雙腿與圓頭小鞋
+      const leftLeg = new THREE.Group();
+      const lShoe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), shoeMat);
+      lShoe.scale.set(1, 0.75, 1.35);
+      lShoe.position.set(-0.2, 0.14, 0.05);
+      leftLeg.add(lShoe);
+      kid.add(leftLeg);
+
+      const rightLeg = new THREE.Group();
+      const rShoe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), shoeMat);
+      rShoe.scale.set(1, 0.75, 1.35);
+      rShoe.position.set(0.2, 0.14, 0.05);
+      rightLeg.add(rShoe);
+      kid.add(rightLeg);
+
+      // 圓潤斗篷式上衣 (下半球平滑收邊)
+      const torsoGroup = new THREE.Group();
+      const bodyCone = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.52, 0.85, 28), dressMat);
+      bodyCone.position.y = 0.65;
+      bodyCone.castShadow = true;
+      torsoGroup.add(bodyCone);
+
+      const skirtHem = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.06, 12, 28), dressMat);
+      skirtHem.rotation.x = Math.PI / 2;
+      skirtHem.position.y = 0.25;
+      torsoGroup.add(skirtHem);
+
+      // 可愛白色圓領口
+      const collar = new THREE.Mesh(
+        new THREE.TorusGeometry(0.3, 0.055, 12, 24),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+      );
+      collar.rotation.x = Math.PI / 2;
+      collar.position.y = 1.06;
+      torsoGroup.add(collar);
+      kid.add(torsoGroup);
+
+      // 左右小手臂 (可揮動)
+      const leftArmPivot = new THREE.Group();
+      leftArmPivot.position.set(-0.38, 0.98, 0);
+      const leftArmMesh = createRoundedLimb(0.11, 0.34, dressMat);
+      leftArmMesh.position.y = -0.15;
+      const leftHand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), skinMat);
+      leftHand.position.y = -0.34;
+      leftArmPivot.add(leftArmMesh, leftHand);
+      leftArmPivot.rotation.z = 0.45;
+      kid.add(leftArmPivot);
+
+      const rightArmPivot = new THREE.Group();
+      rightArmPivot.position.set(0.38, 0.98, 0);
+      const rightArmMesh = createRoundedLimb(0.11, 0.34, dressMat);
+      rightArmMesh.position.y = -0.15;
+      const rightHand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), skinMat);
+      rightHand.position.y = -0.34;
+      rightArmPivot.add(rightArmMesh, rightHand);
+      rightArmPivot.rotation.z = -0.45;
+      kid.add(rightArmPivot);
+
+      // Q版大頭 (微寬的嬰兒肥臉頰)
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, 1.56, 0);
+
+      const face = new THREE.Mesh(new THREE.SphereGeometry(0.54, 32, 32), skinMat);
+      face.scale.set(1.06, 0.98, 1.02);
+      face.castShadow = true;
+      headGroup.add(face);
+
+      // 左右小耳朵
+      const lEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
+      lEar.position.set(-0.54, -0.04, 0);
+      const rEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
+      rEar.position.set(0.54, -0.04, 0);
+      headGroup.add(lEar, rEar);
+
+      // 水汪汪大眼睛 + 眼神高光
+      const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.068, 16, 16), eyeMat);
+      lEye.scale.set(1, 1.25, 0.6);
+      lEye.position.set(-0.2, 0.02, 0.51);
+      const lSpark = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), whiteMat);
+      lSpark.position.set(-0.18, 0.05, 0.55);
+
+      const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.068, 16, 16), eyeMat);
+      rEye.scale.set(1, 1.25, 0.6);
+      rEye.position.set(0.2, 0.02, 0.51);
+      const rSpark = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), whiteMat);
+      rSpark.position.set(0.22, 0.05, 0.55);
+      headGroup.add(lEye, lSpark, rEye, rSpark);
+
+      // 粉嫩圓腮紅
+      const lBlush = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), blushMat);
+      lBlush.scale.set(1.3, 0.75, 0.3);
+      lBlush.position.set(-0.33, -0.09, 0.47);
+      const rBlush = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), blushMat);
+      rBlush.scale.set(1.3, 0.75, 0.3);
+      rBlush.position.set(0.33, -0.09, 0.47);
+      headGroup.add(lBlush, rBlush);
+
+      // 微笑小嘴巴
+      const smile = new THREE.Mesh(
+        new THREE.TorusGeometry(0.06, 0.018, 8, 16, Math.PI),
+        new THREE.MeshBasicMaterial({ color: 0xbe123c })
+      );
+      smile.rotation.x = Math.PI;
+      smile.position.set(0, -0.1, 0.52);
+      headGroup.add(smile);
+
+      // 圓潤髮罩與瀏海
+      const hairCap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.57, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        hairMat
+      );
+      hairCap.scale.set(1.06, 1.0, 1.05);
+      hairCap.rotation.x = -0.18;
+      hairCap.position.y = 0.03;
+      headGroup.add(hairCap);
+
+      // 圓弧齊瀏海球
+      for (let b = -1; b <= 1; b++) {
+        const bang = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 16), hairMat);
+        bang.scale.set(1.2, 0.85, 0.7);
+        bang.position.set(b * 0.2, 0.26, 0.45);
+        headGroup.add(bang);
+      }
+
+      // 專屬髮型變化 (丸子頭 / 雙馬尾 / 棒球帽 / 呆毛)
+      if (config.style === 'bun') {
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 20), hairMat);
+        bun.position.set(0, 0.62, -0.08);
+        headGroup.add(bun);
+      } else if (config.style === 'twintails') {
+        const lTail = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), hairMat);
+        lTail.scale.set(0.9, 1.3, 0.9);
+        lTail.position.set(-0.56, 0.15, -0.1);
+        const rTail = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), hairMat);
+        rTail.scale.set(0.9, 1.3, 0.9);
+        rTail.position.set(0.56, 0.15, -0.1);
+        headGroup.add(lTail, rTail);
+      } else if (config.style === 'cap') {
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 });
+        const visor = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 16), capMat);
+        visor.scale.set(1.2, 0.22, 0.9);
+        visor.position.set(0, 0.32, 0.42);
+        const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), whiteMat);
+        capTop.position.set(0, 0.6, 0);
+        headGroup.add(visor, capTop);
+      } else {
+        // 活力小呆毛或頭頂星星球
+        const sprout = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 0.3 }));
+        sprout.position.set(0, 0.66, 0);
+        headGroup.add(sprout);
+      }
+
+      kid.add(headGroup);
+
+      kid.userData = {
+        headGroup,
+        leftArmPivot,
+        rightArmPivot,
+        leftLeg,
+        rightLeg,
+        phase: config.phase
+      };
+
+      return kid;
+    }
+
+    // 建立圓潤可愛的立體小柴犬
+    function createCuteShiba() {
+      const dog = new THREE.Group();
+
+      const furMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.55 });
+      const creamMat = new THREE.MeshStandardMaterial({ color: 0xfffbeb, roughness: 0.55 });
+      const darkMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+      const collarMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
+
+      // 圓滾滾身體
+      const body = createRoundedLimb(0.36, 0.62, furMat);
+      body.rotation.z = Math.PI / 2;
+      body.position.set(0, 0.52, 0);
+      dog.add(body);
+
+      // 白色蓬鬆胸毛與肚皮
+      const chest = new THREE.Mesh(new THREE.SphereGeometry(0.33, 24, 24), creamMat);
+      chest.scale.set(1.05, 0.95, 0.95);
+      chest.position.set(0.32, 0.48, 0);
+      dog.add(chest);
+
+      // 紅色項圈與小鈴鐺
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.05, 12, 24), collarMat);
+      collar.rotation.y = Math.PI / 2;
+      collar.position.set(0.35, 0.58, 0);
+      const bell = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.6, roughness: 0.2 }));
+      bell.position.set(0.46, 0.34, 0);
+      dog.add(collar, bell);
+
+      // 圓潤柴犬頭部
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0.55, 0.88, 0);
+
+      const skull = new THREE.Mesh(new THREE.SphereGeometry(0.38, 28, 28), furMat);
+      skull.scale.set(1.0, 0.95, 1.08);
+      skull.castShadow = true;
+      headGroup.add(skull);
+
+      // 白色圓臉頰與吻部
+      const snout = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 24), creamMat);
+      snout.scale.set(1.25, 0.85, 1.1);
+      snout.position.set(0.24, -0.08, 0);
+      headGroup.add(snout);
+
+      // 黑亮小鼻子
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 16), darkMat);
+      nose.position.set(0.47, -0.03, 0);
+      headGroup.add(nose);
+
+      // 柴犬招牌白眉豆豆眼
+      const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 14), darkMat);
+      lEye.position.set(0.28, 0.08, 0.2);
+      const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 14), darkMat);
+      rEye.position.set(0.28, 0.08, -0.2);
+
+      const lBrow = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), creamMat);
+      lBrow.scale.set(0.8, 0.6, 1.3);
+      lBrow.position.set(0.28, 0.18, 0.18);
+      const rBrow = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), creamMat);
+      rBrow.scale.set(0.8, 0.6, 1.3);
+      rBrow.position.set(0.28, 0.18, -0.18);
+      headGroup.add(lEye, rEye, lBrow, rBrow);
+
+      // 圓潤尖耳朵
+      const earGeo = new THREE.ConeGeometry(0.15, 0.34, 20);
+      const lEar = new THREE.Mesh(earGeo, furMat);
+      lEar.position.set(-0.02, 0.38, 0.22);
+      lEar.rotation.x = 0.2;
+      lEar.rotation.z = -0.15;
+      const rEar = new THREE.Mesh(earGeo, furMat);
+      rEar.position.set(-0.02, 0.38, -0.22);
+      rEar.rotation.x = -0.2;
+      rEar.rotation.z = -0.15;
+      headGroup.add(lEar, rEar);
+
+      dog.add(headGroup);
+
+      // 捲曲蓬鬆的柴犬尾巴
+      const tailPivot = new THREE.Group();
+      tailPivot.position.set(-0.48, 0.68, 0);
+      const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.095, 16, 24, Math.PI * 1.35), furMat);
+      tailRing.position.set(-0.1, 0.14, 0);
+      const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), creamMat);
+      tailTip.position.set(-0.02, 0.28, 0);
+      tailPivot.add(tailRing, tailTip);
+      dog.add(tailPivot);
+
+      // 四隻可擺動的小短腿
+      const legPositions = [
+        { x: 0.28, z: 0.2 },
+        { x: 0.28, z: -0.2 },
+        { x: -0.28, z: 0.2 },
+        { x: -0.28, z: -0.2 }
+      ];
+      const legs = [];
+      legPositions.forEach((pos) => {
+        const legPivot = new THREE.Group();
+        legPivot.position.set(pos.x, 0.36, pos.z);
+        const upper = createRoundedLimb(0.095, 0.24, furMat);
+        upper.position.y = -0.12;
+        const paw = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), creamMat);
+        paw.position.set(0.03, -0.26, 0);
+        legPivot.add(upper, paw);
+        dog.add(legPivot);
+        legs.push(legPivot);
+      });
+
+      dog.userData = { headGroup, tailPivot, legs };
+      return dog;
+    }
 
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
@@ -503,11 +816,11 @@
 
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0xdbeafe);
-      scene.fog = new THREE.FogExp2(0xdbeafe, 0.012);
+      scene.fog = new THREE.FogExp2(0xdbeafe, 0.009);
 
-      camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
-      camera.position.set(0, 16, 42);
-      camera.lookAt(0, 3.5, 0);
+      camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+      camera.position.set(0, 16.5, cameraDistance);
+      camera.lookAt(0, 3.2, 0);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(width, height);
@@ -516,121 +829,268 @@
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       container.appendChild(renderer.domElement);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x86efac, 0.8);
+      // 柔和晴空雙環境光源
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xa7f3d0, 0.88);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.3);
-      dirLight.position.set(20, 35, 20);
+      const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+      dirLight.position.set(22, 38, 24);
       dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
       scene.add(dirLight);
+
+      const fillLight = new THREE.DirectionalLight(0xe0e7ff, 0.4);
+      fillLight.position.set(-20, 15, -15);
+      scene.add(fillLight);
 
       islandGroup = new THREE.Group();
       scene.add(islandGroup);
 
-      // 主島草皮
-      const islandGeo = new THREE.CylinderGeometry(14, 11, 4, 20);
-      const islandMat = new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.8, flatShading: true });
-      const mainIsland = new THREE.Mesh(islandGeo, islandMat);
-      mainIsland.position.y = -2;
-      mainIsland.receiveShadow = true;
-      islandGroup.add(mainIsland);
+      // 1. 圓潤多層浮空島嶼底座
+      const topGrassGeo = new THREE.CylinderGeometry(14.2, 13.5, 1.6, 64);
+      const topGrassMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 });
+      const topGrass = new THREE.Mesh(topGrassGeo, topGrassMat);
+      topGrass.position.y = -0.8;
+      topGrass.receiveShadow = true;
+      islandGroup.add(topGrass);
 
-      // 底層岩錐
-      const rockGeo = new THREE.ConeGeometry(12, 11, 10);
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.9, flatShading: true });
-      const rockBase = new THREE.Mesh(rockGeo, rockMat);
-      rockBase.rotation.x = Math.PI;
-      rockBase.position.y = -7.5;
-      islandGroup.add(rockBase);
+      // 島嶼邊緣圓潤收邊環
+      const rimRing = new THREE.Mesh(
+        new THREE.TorusGeometry(13.8, 0.82, 24, 64),
+        topGrassMat
+      );
+      rimRing.rotation.x = Math.PI / 2;
+      rimRing.position.y = -0.8;
+      rimRing.receiveShadow = true;
+      islandGroup.add(rimRing);
 
-      // 共鳴大樹
-      const trunkGeo = new THREE.CylinderGeometry(0.8, 1.4, 6, 8);
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9, flatShading: true });
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.position.set(0, 3, 0);
+      // 中央翠綠草坪墊
+      const centerLawn = new THREE.Mesh(
+        new THREE.CylinderGeometry(7.2, 7.6, 0.25, 48),
+        new THREE.MeshStandardMaterial({ color: 0x6ee7b7, roughness: 0.7 })
+      );
+      centerLawn.position.set(-0.5, 0.02, -0.5);
+      centerLawn.receiveShadow = true;
+      islandGroup.add(centerLawn);
+
+      // 底部溫潤土壤島基
+      const soilBase = new THREE.Mesh(
+        new THREE.SphereGeometry(13.2, 48, 32, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
+        new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.85 })
+      );
+      soilBase.scale.set(1, 0.75, 1);
+      soilBase.position.y = -1.2;
+      islandGroup.add(soilBase);
+
+      // 2. 中央豐盛圓潤生命大樹
+      const treeGroup = new THREE.Group();
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.8 });
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.65, 5.8, 32), trunkMat);
+      trunk.position.y = 2.8;
       trunk.castShadow = true;
-      islandGroup.add(trunk);
+      treeGroup.add(trunk);
 
-      const leavesGeo = new THREE.DodecahedronGeometry(4.6, 1);
-      const leavesMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.6, flatShading: true });
-      const leavesMesh = new THREE.Mesh(leavesGeo, leavesMat);
-      leavesMesh.position.set(0, 7.5, 0);
-      leavesMesh.castShadow = true;
-      islandGroup.add(leavesMesh);
+      // 圓潤延伸樹根
+      for (let r = 0; r < 5; r++) {
+        const rAngle = (r / 5) * Math.PI * 2;
+        const root = createRoundedLimb(0.42, 1.8, trunkMat);
+        root.rotation.z = 0.85;
+        root.rotation.y = rAngle;
+        root.position.set(Math.cos(rAngle) * 1.3, 0.4, Math.sin(rAngle) * 1.3);
+        treeGroup.add(root);
+      }
 
-      const gemGeo = new THREE.OctahedronGeometry(1.6);
-      const gemMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.6, roughness: 0.2, metalness: 0.8 });
-      treeGem = new THREE.Mesh(gemGeo, gemMat);
-      treeGem.position.set(0, 13.5, 0);
+      // 6 團雲朵般蓬鬆飽滿的翡翠樹冠
+      const foliageColors = [0x34d399, 0x10b981, 0x2dd4bf, 0x6ee7b7, 0x059669];
+      const canopyPuffs = [
+        { x: 0, y: 8.2, z: 0, r: 4.1, c: foliageColors[0] },
+        { x: -2.5, y: 6.9, z: 1.4, r: 2.9, c: foliageColors[1] },
+        { x: 2.6, y: 7.1, z: 1.2, r: 2.8, c: foliageColors[2] },
+        { x: -1.8, y: 7.3, z: -2.3, r: 2.9, c: foliageColors[3] },
+        { x: 2.1, y: 7.0, z: -2.1, r: 2.7, c: foliageColors[1] },
+        { x: 0, y: 10.4, z: 0, r: 2.8, c: foliageColors[3] }
+      ];
+
+      canopyPuffs.forEach(p => {
+        const puffMat = new THREE.MeshStandardMaterial({ color: p.c, roughness: 0.55 });
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(p.r, 36, 36), puffMat);
+        puff.scale.set(1.06, 0.92, 1.06);
+        puff.position.set(p.x, p.y, p.z);
+        puff.castShadow = true;
+        puff.receiveShadow = true;
+        treeGroup.add(puff);
+      });
+
+      // 樹上點綴發光小果實
+      const berryOffsets = [
+        [2.8, 7.6, 2.5], [-3.1, 7.2, 1.8], [0.8, 9.5, 3.2], [-1.5, 8.8, -3.0], [3.2, 6.8, -1.2]
+      ];
+      berryOffsets.forEach(pos => {
+        const berry = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 16, 16),
+          new THREE.MeshStandardMaterial({ color: 0xfb7185, emissive: 0xf43f5e, emissiveIntensity: 0.25, roughness: 0.3 })
+        );
+        berry.position.set(pos[0], pos[1], pos[2]);
+        treeGroup.add(berry);
+      });
+
+      islandGroup.add(treeGroup);
+
+      // 樹頂圓潤情緒共鳴之心與星環
+      const gemMat = new THREE.MeshStandardMaterial({
+        color: 0x818cf8,
+        emissive: 0x6366f1,
+        emissiveIntensity: 0.5,
+        roughness: 0.15,
+        metalness: 0.3
+      });
+      treeGem = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 32), gemMat);
+      treeGem.scale.set(1, 1.25, 1);
+      treeGem.position.set(0, 14.2, 0);
       islandGroup.add(treeGem);
 
-      // 藍色小水塘
-      const pondGeo = new THREE.CircleGeometry(3.5, 16);
-      const pondMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.8 });
-      const pond = new THREE.Mesh(pondGeo, pondMat);
-      pond.rotation.x = -Math.PI / 2;
-      pond.position.set(-6, 0.05, 3);
-      islandGroup.add(pond);
+      gemHalo = new THREE.Mesh(
+        new THREE.TorusGeometry(1.75, 0.08, 16, 48),
+        new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.8 })
+      );
+      gemHalo.rotation.x = Math.PI / 2.4;
+      gemHalo.position.set(0, 14.2, 0);
+      islandGroup.add(gemHalo);
 
-      // 圍繞大樹的 7 位 Q 版小朋友
-      const kidColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0xec4899, 0x8b5cf6, 0x06b6d4];
-      for (let i = 0; i < 7; i++) {
-        const angle = (i / 7) * Math.PI * 2;
-        const radius = 6.5;
+      // 3. 清澈藍池塘 + 圓潤鵝卵石岸 + 荷葉與小蓮花
+      const pondGroup = new THREE.Group();
+      pondGroup.position.set(-5.6, 0.04, 4.4);
+
+      const water = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.4, 3.4, 0.12, 48),
+        new THREE.MeshStandardMaterial({ color: 0x60a5fa, roughness: 0.2, metalness: 0.1 })
+      );
+      pondGroup.add(water);
+
+      // 池畔圓潤鵝卵石
+      const pebbleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 });
+      for (let p = 0; p < 14; p++) {
+        const pa = (p / 14) * Math.PI * 2;
+        const pebble = new THREE.Mesh(new THREE.SphereGeometry(0.32 + (p % 3) * 0.08, 16, 16), pebbleMat);
+        pebble.scale.set(1.2, 0.55, 1);
+        pebble.position.set(Math.cos(pa) * 3.45, 0.06, Math.sin(pa) * 3.45);
+        pebble.rotation.y = pa;
+        pondGroup.add(pebble);
+      }
+
+      // 翠綠荷葉與粉紅小睡蓮
+      const lilyMat = new THREE.MeshStandardMaterial({ color: 0x34d399, roughness: 0.5 });
+      const lilyPad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.06, 24, 1, false, 0, Math.PI * 1.85), lilyMat);
+      lilyPad1.position.set(-1.1, 0.08, 0.6);
+      const lotus = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.4 }));
+      lotus.scale.set(1, 0.7, 1);
+      lotus.position.set(-1.1, 0.18, 0.6);
+      pondGroup.add(lilyPad1, lotus);
+
+      islandGroup.add(pondGroup);
+
+      // 4. 島上圓點小蘑菇與立體五瓣小花叢
+      const flowerPositions = [
+        [3.2, 2.2], [-2.4, 3.1], [4.5, -1.8], [-4.2, -2.5], [1.5, -4.5], [-1.2, 5.2], [5.8, 3.2], [-6.5, -1.2]
+      ];
+      const petalColors = [0xf43f5e, 0xf59e0b, 0xec4899, 0xa855f7];
+      flowerPositions.forEach((fp, idx) => {
+        const flower = new THREE.Group();
+        flower.position.set(fp[0], 0.14, fp[1]);
+        const center = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+        flower.add(center);
+        const pMat = new THREE.MeshStandardMaterial({ color: petalColors[idx % petalColors.length], roughness: 0.5 });
+        for (let k = 0; k < 5; k++) {
+          const ka = (k / 5) * Math.PI * 2;
+          const petal = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), pMat);
+          petal.scale.set(1, 0.5, 1);
+          petal.position.set(Math.cos(ka) * 0.15, -0.02, Math.sin(ka) * 0.15);
+          flower.add(petal);
+        }
+        islandGroup.add(flower);
+      });
+
+      // 兩朵可愛紅傘白點小蘑菇
+      const mushPositions = [[3.8, -4.8, 1], [-4.8, -4.5, 0.8]];
+      mushPositions.forEach(mp => {
+        const mush = new THREE.Group();
+        mush.position.set(mp[0], 0.1, mp[1]);
+        mush.scale.setScalar(mp[2]);
+        const stem = createRoundedLimb(0.18, 0.35, new THREE.MeshStandardMaterial({ color: 0xfffbeb, roughness: 0.6 }));
+        stem.position.y = 0.2;
+        const cap = new THREE.Mesh(
+          new THREE.SphereGeometry(0.42, 24, 20, 0, Math.PI * 2, 0, Math.PI * 0.55),
+          new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.45 })
+        );
+        cap.position.y = 0.32;
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        dot.position.set(0.18, 0.58, 0.15);
+        mush.add(stem, cap, dot);
+        islandGroup.add(mush);
+      });
+
+      // 5. 圍繞在大樹周圍的 8 位精緻 Q 版小人
+      const kidConfigs = [
+        { shirtColor: 0x34d399, hairColor: 0x451a03, style: 'sprout', phase: 0 },
+        { shirtColor: 0xa855f7, hairColor: 0x1e1b4b, style: 'twintails', phase: 0.8 },
+        { shirtColor: 0xfacc15, hairColor: 0x78350f, style: 'bun', phase: 1.6 },
+        { shirtColor: 0x38bdf8, hairColor: 0x3b0764, style: 'cap', phase: 2.4 },
+        { shirtColor: 0xf43f5e, hairColor: 0x1c1917, style: 'twintails', phase: 3.2 },
+        { shirtColor: 0xf472b6, hairColor: 0x713f12, style: 'bun', phase: 4.0 },
+        { shirtColor: 0xf97316, hairColor: 0x27272a, style: 'cap', phase: 4.8 },
+        { shirtColor: 0x06b6d4, hairColor: 0x52525b, style: 'sprout', phase: 5.6 }
+      ];
+
+      const totalKids = kidConfigs.length;
+      kidConfigs.forEach((cfg, i) => {
+        const angle = (i / totalKids) * Math.PI * 2 + 0.25;
+        const radius = 5.6;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
 
-        const kidGroup = new THREE.Group();
-        kidGroup.position.set(x, 0, z);
+        const kidMesh = createCuteKid(cfg);
+        kidMesh.position.set(x, 0.12, z);
+        // 面向島嶼外圈微偏與大樹互動的角度
+        kidMesh.rotation.y = -angle + Math.PI / 2 + 0.35;
+        islandGroup.add(kidMesh);
+        kidsGroup.push(kidMesh);
+      });
 
-        const bodyGeo = new THREE.CylinderGeometry(0.4, 0.5, 1.2, 6);
-        const bodyMat = new THREE.MeshStandardMaterial({ color: kidColors[i], roughness: 0.7, flatShading: true });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        body.position.y = 0.6;
-        kidGroup.add(body);
+      // 6. 漫步在島上的立體小柴犬
+      shibaDog = createCuteShiba();
+      shibaDog.position.set(-5.2, 0.12, 4.2);
+      islandGroup.add(shibaDog);
 
-        const headGeo = new THREE.SphereGeometry(0.45, 8, 8);
-        const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.6, flatShading: true });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 1.4;
-        kidGroup.add(head);
+      // 7. 棉花糖般蓬鬆的圓潤白雲
+      const cloudPositions = [
+        { x: -16, y: 11.5, z: -8, s: 1.15 },
+        { x: 15, y: 9.2, z: -5, s: 0.95 },
+        { x: 6, y: 15.8, z: -14, s: 1.05 },
+        { x: -11, y: 13.5, z: 10, s: 0.85 }
+      ];
 
-        kidGroup.rotation.y = -angle + Math.PI / 2;
-        islandGroup.add(kidGroup);
-        kidsGroup.push(kidGroup);
-      }
-
-      // 漫步小柴犬
-      const dogGroup = new THREE.Group();
-      const dogBodyGeo = new THREE.BoxGeometry(0.7, 0.4, 0.4);
-      const dogMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 });
-      const dogBody = new THREE.Mesh(dogBodyGeo, dogMat);
-      dogBody.position.y = 0.35;
-      dogGroup.add(dogBody);
-
-      const dogHeadGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
-      const dogHead = new THREE.Mesh(dogHeadGeo, dogMat);
-      dogHead.position.set(0.35, 0.55, 0);
-      dogGroup.add(dogHead);
-      
-      dogGroup.position.set(5, 0, 4);
-      islandGroup.add(dogGroup);
-      dogMesh = dogGroup;
-
-      // 漂浮雲朵
-      for (let i = 0; i < 4; i++) {
-        const cloudGroup = new THREE.Group();
-        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.85 });
-        const c1 = new THREE.Mesh(new THREE.SphereGeometry(1.5, 7, 7), cloudMat);
-        const c2 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 7, 7), cloudMat);
-        c2.position.set(1.2, -0.2, 0);
-        cloudGroup.add(c1); cloudGroup.add(c2);
-        
-        const angle = (i / 4) * Math.PI * 2;
-        cloudGroup.position.set(Math.cos(angle) * 18, 5 + i * 1.5, Math.sin(angle) * 18);
-        scene.add(cloudGroup);
-        cloudsGroup.push(cloudGroup);
-      }
+      cloudPositions.forEach((cp, idx) => {
+        const cloud = new THREE.Group();
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75 });
+        const spheres = [
+          { x: 0, y: 0, z: 0, r: 1.65 },
+          { x: 1.35, y: -0.18, z: 0.2, r: 1.25 },
+          { x: -1.35, y: -0.22, z: -0.1, r: 1.3 },
+          { x: 0.5, y: 0.65, z: -0.2, r: 1.15 },
+          { x: -0.55, y: 0.5, z: 0.25, r: 1.1 }
+        ];
+        spheres.forEach(sp => {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(sp.r, 24, 24), cloudMat);
+          m.position.set(sp.x, sp.y, sp.z);
+          cloud.add(m);
+        });
+        cloud.position.set(cp.x, cp.y, cp.z);
+        cloud.scale.setScalar(cp.s);
+        cloud.userData = { baseX: cp.x, baseY: cp.y, phase: idx * 1.5 };
+        scene.add(cloud);
+        cloudsGroup.push(cloud);
+      });
 
       setupInteractionEvents(container);
       animateScene();
@@ -644,32 +1104,40 @@
         if (!isDragging) return;
         targetRotationY += (e.clientX - prevMouseX) * 0.008;
         targetRotationX += (e.clientY - prevMouseY) * 0.005;
-        targetRotationX = Math.max(0.05, Math.min(Math.PI / 3, targetRotationX));
+        targetRotationX = Math.max(0.05, Math.min(Math.PI / 3.2, targetRotationX));
         prevMouseX = e.clientX; prevMouseY = e.clientY;
       });
+      dom.addEventListener('wheel', (e) => {
+        cameraDistance = Math.max(26, Math.min(55, cameraDistance + e.deltaY * 0.02));
+        camera.position.z = cameraDistance;
+      }, { passive: true });
+
       dom.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) { isDragging = true; prevMouseX = e.touches[0].clientX; prevMouseY = e.touches[0].clientY; }
-      });
+      }, { passive: true });
       window.addEventListener('touchend', () => isDragging = false);
       window.addEventListener('touchmove', (e) => {
         if (!isDragging || e.touches.length !== 1) return;
         targetRotationY += (e.touches[0].clientX - prevMouseX) * 0.008;
         targetRotationX += (e.touches[0].clientY - prevMouseY) * 0.005;
-        targetRotationX = Math.max(0.05, Math.min(Math.PI / 3, targetRotationX));
+        targetRotationX = Math.max(0.05, Math.min(Math.PI / 3.2, targetRotationX));
         prevMouseX = e.touches[0].clientX; prevMouseY = e.touches[0].clientY;
-      });
+      }, { passive: true });
     }
 
     function resetCameraView() {
-      targetRotationY = 0.4; targetRotationX = 0.22;
-      camera.lookAt(0, 3.5, 0);
+      targetRotationY = 0.35;
+      targetRotationX = 0.22;
+      cameraDistance = 40;
+      camera.position.set(0, 16.5, cameraDistance);
+      camera.lookAt(0, 3.2, 0);
       playSoundEffect('click');
     }
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      camera.lookAt(0, 3.5, 0);
+      camera.lookAt(0, 3.2, 0);
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -678,26 +1146,64 @@
       islandGroup.rotation.y += (targetRotationY - islandGroup.rotation.y) * 0.08;
       islandGroup.rotation.x += (targetRotationX - islandGroup.rotation.x) * 0.08;
 
-      const t = Date.now() * 0.002;
+      const t = Date.now() * 0.0025;
+
+      // 樹頂共鳴之心與光環律動
       if (treeGem) {
-        treeGem.rotation.y += 0.02;
-        treeGem.position.y = 13.5 + Math.sin(t * 1.5) * 0.4;
+        treeGem.rotation.y += 0.015;
+        treeGem.position.y = 14.2 + Math.sin(t * 1.4) * 0.35;
+      }
+      if (gemHalo) {
+        gemHalo.rotation.z -= 0.02;
+        gemHalo.position.y = 14.2 + Math.sin(t * 1.4) * 0.35;
       }
 
-      kidsGroup.forEach((kid, idx) => {
-        kid.position.y = Math.sin(t * 2 + idx) * 0.08;
+      // 8位 Q 版小人開心搖頭、揮手與跳躍呼吸動畫
+      kidsGroup.forEach((kid) => {
+        const u = kid.userData;
+        const p = t * 2.2 + u.phase;
+        kid.position.y = 0.12 + Math.abs(Math.sin(p)) * 0.16;
+        u.headGroup.rotation.z = Math.sin(p * 0.7) * 0.12;
+        u.headGroup.rotation.y = Math.cos(p * 0.5) * 0.18;
+        // 雙手開心擺動
+        u.leftArmPivot.rotation.z = 0.45 + Math.sin(p * 1.5) * 0.35;
+        u.rightArmPivot.rotation.z = -0.45 - Math.cos(p * 1.5) * 0.35;
       });
 
-      if (dogMesh) {
-        const dogAngle = t * 0.5;
-        const dogRadius = 8.5;
-        dogMesh.position.x = Math.cos(dogAngle) * dogRadius;
-        dogMesh.position.z = Math.sin(dogAngle) * dogRadius;
-        dogMesh.rotation.y = -dogAngle;
+      // 立體小柴犬繞著島嶼外圈輕快散步 + 搖尾巴 + 四腳交替踏步
+      if (shibaDog) {
+        const dogAngle = t * 0.32;
+        const rx = 9.2;
+        const rz = 8.4;
+        const curX = Math.cos(dogAngle) * rx;
+        const curZ = Math.sin(dogAngle) * rz;
+        const nextX = Math.cos(dogAngle + 0.05) * rx;
+        const nextZ = Math.sin(dogAngle + 0.05) * rz;
+
+        shibaDog.position.x = curX;
+        shibaDog.position.z = curZ;
+        // 奔跑輕微彈跳
+        shibaDog.position.y = 0.12 + Math.abs(Math.sin(t * 5.5)) * 0.14;
+        // 朝前進方向轉向
+        shibaDog.rotation.y = Math.atan2(-(nextZ - curZ), nextX - curX);
+
+        // 四隻小短腿交替邁步
+        const walkCycle = t * 6.5;
+        const legs = shibaDog.userData.legs;
+        legs[0].rotation.z = Math.sin(walkCycle) * 0.55;
+        legs[1].rotation.z = -Math.sin(walkCycle) * 0.55;
+        legs[2].rotation.z = -Math.sin(walkCycle) * 0.55;
+        legs[3].rotation.z = Math.sin(walkCycle) * 0.55;
+
+        // 柴犬搖尾巴與歪頭探索
+        shibaDog.userData.tailPivot.rotation.x = Math.sin(t * 9) * 0.35;
+        shibaDog.userData.headGroup.rotation.z = Math.sin(t * 3) * 0.08;
       }
 
-      cloudsGroup.forEach((cloud, idx) => {
-        cloud.position.y += Math.sin(t + idx) * 0.003;
+      // 雲朵輕柔漂浮
+      cloudsGroup.forEach((cloud) => {
+        cloud.position.y = cloud.userData.baseY + Math.sin(t * 0.8 + cloud.userData.phase) * 0.35;
+        cloud.position.x = cloud.userData.baseX + Math.cos(t * 0.4 + cloud.userData.phase) * 0.6;
       });
 
       renderer.render(scene, camera);
@@ -706,8 +1212,8 @@
     function updateTreeGemColor() {
       if (!treeGem) return;
       if (classRecords.length === 0) {
-        treeGem.material.color.setHex(0xf59e0b);
-        treeGem.material.emissive.setHex(0xf59e0b);
+        treeGem.material.color.setHex(0x818cf8);
+        treeGem.material.emissive.setHex(0x6366f1);
         return;
       }
       const counts = { positive: 0, sensitive: 0, peace: 0 };
@@ -715,12 +1221,12 @@
         const def = EMOTION_DEFINITIONS.find(d => d.id === r.emotionId);
         if (def) counts[def.category] = (counts[def.category] || 0) + 1;
       });
-      if (counts.sensitive > counts.positive) {
+      if (counts.positive >= counts.sensitive) {
+        treeGem.material.color.setHex(0xf59e0b);
+        treeGem.material.emissive.setHex(0xd97706);
+      } else {
         treeGem.material.color.setHex(0x818cf8);
         treeGem.material.emissive.setHex(0x6366f1);
-      } else {
-        treeGem.material.color.setHex(0xf59e0b);
-        treeGem.material.emissive.setHex(0xf59e0b);
       }
     }
 
@@ -735,7 +1241,7 @@
       badgeText.innerText = `${currentStudent.group} ${currentStudent.name}`;
       const exist = classRecords.find(r => r.studentId === currentStudent.id && r.date === getTodayDateStr());
       if (exist) {
-        btnText.innerText = `已記錄 ${currentStudent.name} (點擊更新)`;
+        btnText.innerText = `已記錄 ${currentStudent.name} (點擊更新心情)`;
       } else {
         btnText.innerText = `記錄 ${currentStudent.name} 的心情卡`;
       }
