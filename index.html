@@ -341,8 +341,8 @@
           <i data-lucide="heart" class="w-4 h-4 text-rose-500 fill-rose-500"></i>
           <span>點擊卡片愛心可為同學送上匿名打氣！</span>
         </div>
-        <button onclick="exportClassRecordsSummary()" class="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
-          <i data-lucide="download" class="w-3.5 h-3.5"></i> 匯出今日摘要
+        <button id="export-summary-btn" onclick="exportClassRecordsSummary()" class="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i> 匯出摘要圖檔
         </button>
       </div>
 
@@ -2076,24 +2076,114 @@
       if (badge) badge.innerText = todayCount;
     }
 
-    function exportClassRecordsSummary() {
-      playSoundEffect('click');
-      const selectedDate = document.getElementById('wall-date-filter').value || getTodayDateStr();
-      const dayRecords = classRecords.filter(r => r.date === selectedDate);
-
-      let summaryText = `【班級情緒島 - 課堂討論摘要】\n日期：${selectedDate}\n總簽到人數：${dayRecords.length}\n----------------------------\n`;
-      dayRecords.forEach(r => {
-        const def = EMOTION_DEFINITIONS.find(d => d.id === r.emotionId);
-        const name = r.isPublic ? r.studentName : `${r.studentName} (悄悄話)`;
-        const dName = r.emotionId === 'custom_other' ? r.customName : (def ? def.name : '未知');
-        summaryText += `${r.group} ${name}：${dName} (強度 ${r.intensity}) | 備註：${r.note || '無'}\n`;
+    function summaryWrap(ctx, text, width) {
+      const lines=[];
+      for(const paragraph of String(text ?? '').split('\n')) {
+        let line='';
+        for(const character of Array.from(paragraph)) {
+          if(line && ctx.measureText(line+character).width>width){lines.push(line);line=character;}
+          else line+=character;
+        }
+        lines.push(line);
+      }
+      return lines;
+    }
+    async function makeDailySummaryImages(records, date, teacher) {
+      const width=1080, measure=document.createElement('canvas').getContext('2d');
+      const font=(ctx,size,bold=false)=>{ctx.font=(bold?'700 ':'500 ')+size+'px "Zen Maru Gothic", sans-serif';};
+      const counts=EMOTION_DEFINITIONS.map(def=>({def,count:records.filter(r=>r.emotionId===def.id).length})).filter(item=>item.count);
+      const chartHeight=Math.max(64,counts.length*45);
+      const headerHeight=310+chartHeight;
+      const cards=records.map(record=>{
+        const def=EMOTION_DEFINITIONS.find(d=>d.id===record.emotionId);
+        const name=record.emotionId==='custom_other'?(record.customName||'其他心情'):(def?.name||'未分類');
+        font(measure,26,true);
+        const heading=summaryWrap(measure,(record.group||'')+' '+(record.studentName||'未具名')+(record.isPublic?'':' · 私人紀錄'),880);
+        const emotion=summaryWrap(measure,name+'　強度 '+Math.max(1,Math.min(5,Number(record.intensity)||3))+'/5',880);
+        font(measure,23);
+        const reasons=(Array.isArray(record.reasons)?record.reasons:[]).map(id=>REASON_OPTIONS.find(r=>r.id===id)?.label).filter(Boolean).join('、');
+        const detail=summaryWrap(measure,'原因：'+(reasons||'未填寫'),880);
+        const notes=summaryWrap(measure,'備註：'+(record.note||'未填寫'),880);
+        return {record,def,heading,emotion,detail,notes,height:114+(heading.length+emotion.length)*36+(detail.length+notes.length)*33};
       });
-
-      navigator.clipboard.writeText(summaryText).then(() => {
-        alert('已將當日全班心情摘要複製至剪貼簿！');
-      }).catch(() => {
-        alert(summaryText);
-      });
+      const pages=[];let page=[],height=headerHeight+90;
+      for(const card of cards){if(page.length && height+card.height+20>6800){pages.push(page);page=[];height=headerHeight+90;}page.push(card);height+=card.height+20;}
+      pages.push(page);
+      const output=[];
+      for(let index=0;index<pages.length;index++) {
+        const pageCards=pages[index],canvas=document.createElement('canvas');
+        canvas.width=width;canvas.height=headerHeight+90+pageCards.reduce((sum,c)=>sum+c.height+20,0)+(pageCards.length?0:120);
+        const ctx=canvas.getContext('2d');
+        ctx.fillStyle='#edf5fb';ctx.fillRect(0,0,width,canvas.height);
+        const round=(x,y,w,h,r,color)=>{ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fill();};
+        round(36,32,1008,headerHeight-44,28,'#ffffff');
+        font(ctx,40,true);ctx.fillStyle='#243951';ctx.fillText('班級情緒島｜每日心情摘要',66,96);
+        font(ctx,24);ctx.fillStyle='#64748b';ctx.fillText(date+'　'+(teacher?'老師檢視 · 含可查看的私人紀錄':'公開紀錄摘要'),66,140);
+        const privateCount=records.filter(r=>!r.isPublic).length;
+        [['紀錄總數',records.length],['公開紀錄',records.length-privateCount],['私人紀錄',privateCount]].forEach(([label,value],i)=>{
+          round(66+i*318,166,298,82,16,['#eef2ff','#e9f8f2','#fff3e8'][i]);
+          font(ctx,20);ctx.fillStyle='#64748b';ctx.fillText(label,86+i*318,197);
+          font(ctx,30,true);ctx.fillStyle='#243951';ctx.fillText(String(value),86+i*318,232);
+        });
+        font(ctx,23,true);ctx.fillStyle='#334155';ctx.fillText('當日心情分布',66,290);
+        if(!counts.length){font(ctx,23);ctx.fillStyle='#94a3b8';ctx.fillText('此日期尚無可匯出的紀錄',66,337);}
+        counts.forEach(({def,count},i)=>{
+          const y=320+i*45; font(ctx,22);ctx.fillStyle='#475569';ctx.fillText(def.name,66,y+22);
+          round(174,y+2,720,25,10,'#f1f5f9');
+          round(174,y+2,Math.max(25,720*count/Math.max(1,records.length)),25,10,def.color||'#818cf8');
+          ctx.fillStyle='#475569';ctx.fillText(count+' 筆',920,y+23);
+        });
+        let y=headerHeight;
+        for(const card of pageCards){
+          round(36,y,1008,card.height,24,'#ffffff');
+          round(36,y,8,card.height,4,card.def?.color||'#818cf8');
+          let lineY=y+43;
+          font(ctx,26,true);ctx.fillStyle='#243951';
+          for(const line of card.heading){ctx.fillText(line,68,lineY);lineY+=36;}
+          ctx.fillStyle=card.def?.color||'#6366f1';
+          for(const line of card.emotion){ctx.fillText(line,68,lineY);lineY+=36;}
+          lineY+=6;font(ctx,23);ctx.fillStyle='#526176';
+          for(const line of [...card.detail,...card.notes]){ctx.fillText(line,68,lineY);lineY+=33;}
+          font(ctx,19);ctx.fillStyle='#94a3b8';ctx.fillText('記錄時間 '+(card.record.timestamp||'—')+'　·　打氣 '+(Number(card.record.likes)||0)+' 次',68,y+card.height-22);
+          y+=card.height+20;
+        }
+        font(ctx,18);ctx.fillStyle='#718096';ctx.fillText((teacher?'含私人紀錄，請妥善保管':'只包含目前可查看的公開紀錄')+'　｜　第 '+(index+1)+' / '+pages.length+' 張',46,canvas.height-22);
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+        if(!blob)throw new Error('無法產生圖檔，請稍後重試');
+        output.push({blob,name:'班級情緒島_'+date+(pages.length>1?'_'+(index+1):'')+'.png'});
+        canvas.width=1;canvas.height=1;
+      }
+      return output;
+    }
+    async function exportClassRecordsSummary() {
+      const date=document.getElementById('wall-date-filter').value||getTodayDateStr();
+      const trigger=document.getElementById('export-summary-btn');
+      if(trigger.disabled)return;
+      trigger.disabled=true;trigger.setAttribute('aria-busy','true');
+      try {
+        if(!cloudClient)throw new Error('雲端尚未連接，請稍後重試');
+        // Query the chosen date directly, respecting current server permissions.
+        const {data,error}=await cloudClient.from('emotion_records').select('*').eq('record_date',date).order('student_id');
+        if(error)throw error;
+        const records=data.map(row=>({...row.payload,studentId:row.student_id,date:row.record_date,isPublic:row.is_public,likes:row.likes}));
+        if(document.fonts)await document.fonts.ready;
+        const images=await makeDailySummaryImages(records,date,!!cloudProfile?.is_teacher);
+        const box=document.createElement('div');box.className='fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-4';
+        const panel=document.createElement('div');panel.className='bg-white rounded-2xl p-4 w-full max-w-2xl overflow-y-auto';
+        const heading=document.createElement('h2');heading.className='font-bold text-lg';heading.textContent='每日摘要圖檔 · '+date;
+        const help=document.createElement('p');help.className='text-xs text-slate-500 my-2';help.textContent=images.length>1?'內容較長，已分成 '+images.length+' 張圖檔，請逐張下載。':'已整理為一張 PNG。手機可下載後儲存，或長按下方圖片。';
+        const close=document.createElement('button');close.textContent='關閉預覽';close.className='bg-slate-100 px-3 py-2 rounded-xl my-2 text-sm';
+        const urls=[];close.onclick=()=>{urls.forEach(url=>URL.revokeObjectURL(url));box.remove();};
+        panel.append(heading,help,close);
+        images.forEach(({blob,name},index)=>{
+          const url=URL.createObjectURL(blob);urls.push(url);
+          const link=document.createElement('a');link.href=url;link.download=name;link.textContent=images.length>1?'下載第 '+(index+1)+' 張 PNG':'下載摘要 PNG';link.className='block text-center bg-indigo-600 text-white rounded-xl p-3 my-3 font-bold';
+          const image=document.createElement('img');image.src=url;image.alt=date+' 每日心情摘要，第 '+(index+1)+' 張';image.className='w-full rounded-xl border border-slate-100';
+          panel.append(link,image);
+        });
+        box.appendChild(panel);document.body.appendChild(box);
+      }catch(error){alert('圖檔匯出失敗：'+error.message);}
+      finally{trigger.disabled=false;trigger.removeAttribute('aria-busy');}
     }
 
     window.addEventListener('DOMContentLoaded', () => {
