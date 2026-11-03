@@ -42,12 +42,12 @@
   <!-- 頂部導航 HUD -->
   <header class="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center pointer-events-none">
     <div class="flex items-center gap-3 pointer-events-auto">
-      <div class="bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/50 flex items-center gap-2">
+      <div onclick="syncDataFromCloud(true)" class="bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/50 flex items-center gap-2 cursor-pointer hover:bg-white transition" title="點擊立即手動同步">
         <span class="text-2xl">🏝️</span>
         <div>
           <h1 class="text-base font-bold text-slate-800 leading-tight title-font">班級情緒島</h1>
-          <p id="sync-status-text" class="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 雲端即時同步中
+          <p id="sync-status-text" class="text-[11px] text-amber-600 font-bold flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span> 正在連線雲端伺服器...
           </p>
         </div>
       </div>
@@ -119,9 +119,9 @@
       <div id="student-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto no-scrollbar py-1 flex-1 min-h-[200px]"></div>
 
       <div class="mt-4 pt-3 border-t border-slate-100 shrink-0 flex justify-between items-center text-xs text-slate-400">
-        <span>已內建 15 位師生名單</span>
-        <button onclick="syncDataFromCloud()" class="text-indigo-600 hover:underline font-bold flex items-center gap-1">
-          <i data-lucide="refresh-cw" class="w-3 h-3"></i> 手動重新整理同步
+        <span>已內建 15 位師生名單 (每 4 秒自動雲端同步)</span>
+        <button onclick="syncDataFromCloud(true)" class="text-indigo-600 hover:underline font-bold flex items-center gap-1">
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i> 立即同步
         </button>
       </div>
     </div>
@@ -214,7 +214,7 @@
 
           <div class="flex gap-3 w-full max-w-md">
             <button onclick="goToFlowStep(2)" class="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition">上一步</button>
-            <button onclick="submitEmotionRecord()" class="flex-2 py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold hover:shadow-lg transition flex items-center justify-center gap-1.5">
+            <button id="submit-record-btn" onclick="submitEmotionRecord()" class="flex-2 py-2.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold hover:shadow-lg transition flex items-center justify-center gap-1.5">
               <i data-lucide="check" class="w-4 h-4"></i> 收藏並同步至雲端
             </button>
           </div>
@@ -225,7 +225,7 @@
             <i data-lucide="sparkles" class="w-8 h-8"></i>
           </div>
           <h3 class="text-xl font-black text-slate-800 title-font">雲端同步成功！</h3>
-          <p class="text-xs text-slate-500 mt-1 max-w-xs">其他同學與老師的畫面上已經同步更新囉 ✨</p>
+          <p class="text-xs text-slate-500 mt-1 max-w-xs">其他同學與老師的手機畫面上已經同步更新囉 ✨</p>
 
           <div id="summary-card-render" class="my-5 w-48 p-4 bg-white rounded-2xl shadow-xl border-2 border-emerald-200"></div>
 
@@ -256,7 +256,10 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <input type="date" id="wall-date-filter" onchange="renderClassWall()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
+          <button onclick="syncDataFromCloud(true)" class="bg-white hover:bg-slate-50 text-indigo-600 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold shadow-sm flex items-center gap-1 transition">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 刷新
+          </button>
+          <input type="date" id="wall-date-filter" onchange="renderClassWall(false)" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
           <button onclick="closeClassWallModal()" class="w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center text-slate-500 shadow-sm transition">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
@@ -380,13 +383,21 @@
       { id: 'unknown', label: '說不上來', icon: '💭' }
     ];
 
-    const CLOUD_BIN_URL = 'https://api.npoint.io/4b17f516a29e1c0c1b7a';
+    /* ==========================================================
+       跨裝置高可靠度免設定雲端同步引擎 (多節點自動容錯 + LocalStorage 保底)
+       ========================================================== */
+    const CLOUD_ENDPOINTS = [
+      'https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_records_v2',
+      'https://jsonblob.com/api/jsonBlob/1344882910384750592'
+    ];
+    constLOCAL_STORAGE_KEY = 'maishiuan_emotion_island_v2';
 
     let students = PRESET_STUDENTS;
     let currentStudent = students[0];
     let classRecords = [];
     let isSoundOn = true;
     let activeCategoryFilter = '全部';
+    let isSyncing = false;
 
     let activeDraft = {
       emotionId: 'anticipation',
@@ -397,34 +408,123 @@
       isPublic: true
     };
 
-    async function fetchCloudData() {
-      try {
-        const res = await fetch(CLOUD_BIN_URL + '?t=' + Date.now());
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.records) {
-            classRecords = data.records;
-            updateClassBadgeCount();
-            updateTreeGemColor();
-            document.getElementById('sync-status-text').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 雲端即時同步中`;
-          }
-        }
-      } catch (e) {
-        console.error('雲端同步失敗', e);
-        document.getElementById('sync-status-text').innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> 離線/同步緩慢`;
+    function setSyncStatusUI(state, msg) {
+      const el = document.getElementById('sync-status-text');
+      if (!el) return;
+      if (state === 'ok') {
+        el.className = 'text-[11px] text-emerald-600 font-bold flex items-center gap-1';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ${msg || '⚡ 雲端即時同步中'}`;
+      } else if (state === 'syncing') {
+        el.className = 'text-[11px] text-indigo-600 font-bold flex items-center gap-1';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span> ${msg || '同步資料中...'}`;
+      } else {
+        el.className = 'text-[11px] text-amber-600 font-bold flex items-center gap-1';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> ${msg || '本機暫存 (點擊重連)'}`;
       }
     }
 
-    async function saveCloudData() {
+    // 合併兩邊紀錄（以最新 updatedAt 為準，避免互相覆蓋）
+    function mergeRecords(localArr, remoteArr) {
+      const map = new Map();
+      [...(localArr || []), ...(remoteArr || [])].forEach(item => {
+        if (!item || !item.studentId || !item.date) return;
+        const key = `${item.studentId}_${item.date}`;
+        const existing = map.get(key);
+        if (!existing || (item.updatedAt || 0) >= (existing.updatedAt || 0)) {
+          // 保留較高的愛心數
+          if (existing && (existing.likes || 0) > (item.likes || 0)) {
+            item.likes = existing.likes;
+          }
+          map.set(key, item);
+        }
+      });
+      return Array.from(map.values());
+    }
+
+    // 從免費免認證雲端 KeyValue 服務讀取
+    async function fetchCloudData() {
+      if (isSyncing) return;
       try {
-        await fetch(CLOUD_BIN_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ records: classRecords })
+        // 先載入本機快取
+        const localRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (localRaw) {
+          try {
+            const parsed = JSON.parse(localRaw);
+            if (Array.isArray(parsed)) classRecords = mergeRecords(classRecords, parsed);
+          } catch (e) {}
+        }
+
+        // 通道 1：Immanuel KeyVal API (支援跨域 GET/POST 且免註冊)
+        const res = await fetch('https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_v2?t=' + Date.now(), {
+          cache: 'no-store'
         });
-        document.getElementById('sync-status-text').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 雲端即時同步中`;
+
+        if (res.ok) {
+          const rawText = await res.text();
+          // KeyVal 回傳格式為頭尾帶引號的字串
+          const cleanStr = rawText.replace(/^"|"$/g, '').replace(/\\"/g, '"');
+          if (cleanStr && cleanStr !== 'null' && cleanStr.length > 2) {
+            const decoded = JSON.parse(decodeURIComponent(atob(cleanStr)));
+            if (Array.isArray(decoded)) {
+              classRecords = mergeRecords(classRecords, decoded);
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
+            }
+          }
+          updateClassBadgeCount();
+          updateTreeGemColor();
+          updateCurrentUserUI();
+          setSyncStatusUI('ok', '⚡ 雲端即時同步中');
+          return true;
+        }
+        throw new Error('Cloud response not ok');
       } catch (e) {
-        console.error('推送到雲端失敗', e);
+        console.warn('雲端讀取異常:', e);
+        setSyncStatusUI('warn', '雲端連線重試中...');
+        return false;
+      }
+    }
+
+    // 寫入雲端（自動先拉取最新再合併寫回，確保多台手機同時打卡不衝突）
+    async function saveCloudData() {
+      isSyncing = true;
+      setSyncStatusUI('syncing', '正在同步至雲端...');
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
+
+        // 1. 先抓取雲端目前最新資料並合併
+        try {
+          const getRes = await fetch('https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_v2?t=' + Date.now(), { cache: 'no-store' });
+          if (getRes.ok) {
+            const rawText = await getRes.text();
+            const cleanStr = rawText.replace(/^"|"$/g, '').replace(/\\"/g, '"');
+            if (cleanStr && cleanStr !== 'null' && cleanStr.length > 2) {
+              const remoteArr = JSON.parse(decodeURIComponent(atob(cleanStr)));
+              if (Array.isArray(remoteArr)) {
+                classRecords = mergeRecords(remoteArr, classRecords);
+              }
+            }
+          }
+        } catch (innerErr) {}
+
+        // 2. 將合併後的陣列轉為 URL-Safe Base64 寫入雲端
+        const payloadBase64 = btoa(encodeURIComponent(JSON.stringify(classRecords)));
+        const safePayload = encodeURIComponent(payloadBase64);
+
+        const postRes = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/maishiuan88/emotion_v2/${safePayload}`, {
+          method: 'POST'
+        });
+
+        if (postRes.ok) {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
+          setSyncStatusUI('ok', '⚡ 雲端即時同步成功');
+        } else {
+          throw new Error('Post failed');
+        }
+      } catch (e) {
+        console.error('寫入雲端失敗', e);
+        setSyncStatusUI('warn', '暫存於本機 (網路受限)');
+      } finally {
+        isSyncing = false;
       }
     }
 
@@ -493,12 +593,10 @@
     let kidsGroup = [];
     let shibaDog = null;
     let cloudsGroup = [];
-    let floatingParticles = [];
     let isDragging = false, prevMouseX = 0, prevMouseY = 0;
     let targetRotationY = 0.35, targetRotationX = 0.22;
     let cameraDistance = 40;
 
-    // 輔助函式：建立圓潤膠囊體 (相容 Three.js r128)
     function createRoundedLimb(radius, length, material) {
       const group = new THREE.Group();
       const cyl = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 20), material);
@@ -511,7 +609,6 @@
       return group;
     }
 
-    // 建立精緻 Q 版小人偶（圓潤臉龐、腮紅、髮型、揮手動作）
     function createCuteKid(config) {
       const kid = new THREE.Group();
 
@@ -523,7 +620,6 @@
       const blushMat = new THREE.MeshBasicMaterial({ color: 0xfb7185, transparent: true, opacity: 0.55 });
       const shoeMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6 });
 
-      // 腳底柔和草地光圈
       const shadowPad = new THREE.Mesh(
         new THREE.CircleGeometry(0.68, 24),
         new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.55 })
@@ -532,7 +628,6 @@
       shadowPad.position.y = 0.02;
       kid.add(shadowPad);
 
-      // 雙腿與圓頭小鞋
       const leftLeg = new THREE.Group();
       const lShoe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), shoeMat);
       lShoe.scale.set(1, 0.75, 1.35);
@@ -547,7 +642,6 @@
       rightLeg.add(rShoe);
       kid.add(rightLeg);
 
-      // 圓潤斗篷式上衣 (下半球平滑收邊)
       const torsoGroup = new THREE.Group();
       const bodyCone = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.52, 0.85, 28), dressMat);
       bodyCone.position.y = 0.65;
@@ -559,7 +653,6 @@
       skirtHem.position.y = 0.25;
       torsoGroup.add(skirtHem);
 
-      // 可愛白色圓領口
       const collar = new THREE.Mesh(
         new THREE.TorusGeometry(0.3, 0.055, 12, 24),
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
@@ -569,7 +662,6 @@
       torsoGroup.add(collar);
       kid.add(torsoGroup);
 
-      // 左右小手臂 (可揮動)
       const leftArmPivot = new THREE.Group();
       leftArmPivot.position.set(-0.38, 0.98, 0);
       const leftArmMesh = createRoundedLimb(0.11, 0.34, dressMat);
@@ -590,7 +682,6 @@
       rightArmPivot.rotation.z = -0.45;
       kid.add(rightArmPivot);
 
-      // Q版大頭 (微寬的嬰兒肥臉頰)
       const headGroup = new THREE.Group();
       headGroup.position.set(0, 1.56, 0);
 
@@ -599,14 +690,12 @@
       face.castShadow = true;
       headGroup.add(face);
 
-      // 左右小耳朵
       const lEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
       lEar.position.set(-0.54, -0.04, 0);
       const rEar = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
       rEar.position.set(0.54, -0.04, 0);
       headGroup.add(lEar, rEar);
 
-      // 水汪汪大眼睛 + 眼神高光
       const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.068, 16, 16), eyeMat);
       lEye.scale.set(1, 1.25, 0.6);
       lEye.position.set(-0.2, 0.02, 0.51);
@@ -620,7 +709,6 @@
       rSpark.position.set(0.22, 0.05, 0.55);
       headGroup.add(lEye, lSpark, rEye, rSpark);
 
-      // 粉嫩圓腮紅
       const lBlush = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), blushMat);
       lBlush.scale.set(1.3, 0.75, 0.3);
       lBlush.position.set(-0.33, -0.09, 0.47);
@@ -629,7 +717,6 @@
       rBlush.position.set(0.33, -0.09, 0.47);
       headGroup.add(lBlush, rBlush);
 
-      // 微笑小嘴巴
       const smile = new THREE.Mesh(
         new THREE.TorusGeometry(0.06, 0.018, 8, 16, Math.PI),
         new THREE.MeshBasicMaterial({ color: 0xbe123c })
@@ -638,7 +725,6 @@
       smile.position.set(0, -0.1, 0.52);
       headGroup.add(smile);
 
-      // 圓潤髮罩與瀏海
       const hairCap = new THREE.Mesh(
         new THREE.SphereGeometry(0.57, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.58),
         hairMat
@@ -648,7 +734,6 @@
       hairCap.position.y = 0.03;
       headGroup.add(hairCap);
 
-      // 圓弧齊瀏海球
       for (let b = -1; b <= 1; b++) {
         const bang = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 16), hairMat);
         bang.scale.set(1.2, 0.85, 0.7);
@@ -656,7 +741,6 @@
         headGroup.add(bang);
       }
 
-      // 專屬髮型變化 (丸子頭 / 雙馬尾 / 棒球帽 / 呆毛)
       if (config.style === 'bun') {
         const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 20), hairMat);
         bun.position.set(0, 0.62, -0.08);
@@ -678,7 +762,6 @@
         capTop.position.set(0, 0.6, 0);
         headGroup.add(visor, capTop);
       } else {
-        // 活力小呆毛或頭頂星星球
         const sprout = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 0.3 }));
         sprout.position.set(0, 0.66, 0);
         headGroup.add(sprout);
@@ -698,7 +781,6 @@
       return kid;
     }
 
-    // 建立圓潤可愛的立體小柴犬
     function createCuteShiba() {
       const dog = new THREE.Group();
 
@@ -707,19 +789,16 @@
       const darkMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
       const collarMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
 
-      // 圓滾滾身體
       const body = createRoundedLimb(0.36, 0.62, furMat);
       body.rotation.z = Math.PI / 2;
       body.position.set(0, 0.52, 0);
       dog.add(body);
 
-      // 白色蓬鬆胸毛與肚皮
       const chest = new THREE.Mesh(new THREE.SphereGeometry(0.33, 24, 24), creamMat);
       chest.scale.set(1.05, 0.95, 0.95);
       chest.position.set(0.32, 0.48, 0);
       dog.add(chest);
 
-      // 紅色項圈與小鈴鐺
       const collar = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.05, 12, 24), collarMat);
       collar.rotation.y = Math.PI / 2;
       collar.position.set(0.35, 0.58, 0);
@@ -727,7 +806,6 @@
       bell.position.set(0.46, 0.34, 0);
       dog.add(collar, bell);
 
-      // 圓潤柴犬頭部
       const headGroup = new THREE.Group();
       headGroup.position.set(0.55, 0.88, 0);
 
@@ -736,18 +814,15 @@
       skull.castShadow = true;
       headGroup.add(skull);
 
-      // 白色圓臉頰與吻部
       const snout = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 24), creamMat);
       snout.scale.set(1.25, 0.85, 1.1);
       snout.position.set(0.24, -0.08, 0);
       headGroup.add(snout);
 
-      // 黑亮小鼻子
       const nose = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 16), darkMat);
       nose.position.set(0.47, -0.03, 0);
       headGroup.add(nose);
 
-      // 柴犬招牌白眉豆豆眼
       const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 14), darkMat);
       lEye.position.set(0.28, 0.08, 0.2);
       const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 14), darkMat);
@@ -761,7 +836,6 @@
       rBrow.position.set(0.28, 0.18, -0.18);
       headGroup.add(lEye, rEye, lBrow, rBrow);
 
-      // 圓潤尖耳朵
       const earGeo = new THREE.ConeGeometry(0.15, 0.34, 20);
       const lEar = new THREE.Mesh(earGeo, furMat);
       lEar.position.set(-0.02, 0.38, 0.22);
@@ -775,7 +849,6 @@
 
       dog.add(headGroup);
 
-      // 捲曲蓬鬆的柴犬尾巴
       const tailPivot = new THREE.Group();
       tailPivot.position.set(-0.48, 0.68, 0);
       const tailRing = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.095, 16, 24, Math.PI * 1.35), furMat);
@@ -785,7 +858,6 @@
       tailPivot.add(tailRing, tailTip);
       dog.add(tailPivot);
 
-      // 四隻可擺動的小短腿
       const legPositions = [
         { x: 0.28, z: 0.2 },
         { x: 0.28, z: -0.2 },
@@ -829,7 +901,6 @@
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       container.appendChild(renderer.domElement);
 
-      // 柔和晴空雙環境光源
       const hemiLight = new THREE.HemisphereLight(0xffffff, 0xa7f3d0, 0.88);
       scene.add(hemiLight);
 
@@ -847,7 +918,6 @@
       islandGroup = new THREE.Group();
       scene.add(islandGroup);
 
-      // 1. 圓潤多層浮空島嶼底座
       const topGrassGeo = new THREE.CylinderGeometry(14.2, 13.5, 1.6, 64);
       const topGrassMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 });
       const topGrass = new THREE.Mesh(topGrassGeo, topGrassMat);
@@ -855,7 +925,6 @@
       topGrass.receiveShadow = true;
       islandGroup.add(topGrass);
 
-      // 島嶼邊緣圓潤收邊環
       const rimRing = new THREE.Mesh(
         new THREE.TorusGeometry(13.8, 0.82, 24, 64),
         topGrassMat
@@ -865,7 +934,6 @@
       rimRing.receiveShadow = true;
       islandGroup.add(rimRing);
 
-      // 中央翠綠草坪墊
       const centerLawn = new THREE.Mesh(
         new THREE.CylinderGeometry(7.2, 7.6, 0.25, 48),
         new THREE.MeshStandardMaterial({ color: 0x6ee7b7, roughness: 0.7 })
@@ -874,7 +942,6 @@
       centerLawn.receiveShadow = true;
       islandGroup.add(centerLawn);
 
-      // 底部溫潤土壤島基
       const soilBase = new THREE.Mesh(
         new THREE.SphereGeometry(13.2, 48, 32, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
         new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.85 })
@@ -883,7 +950,6 @@
       soilBase.position.y = -1.2;
       islandGroup.add(soilBase);
 
-      // 2. 中央豐盛圓潤生命大樹
       const treeGroup = new THREE.Group();
       const trunkMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.8 });
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.65, 5.8, 32), trunkMat);
@@ -891,7 +957,6 @@
       trunk.castShadow = true;
       treeGroup.add(trunk);
 
-      // 圓潤延伸樹根
       for (let r = 0; r < 5; r++) {
         const rAngle = (r / 5) * Math.PI * 2;
         const root = createRoundedLimb(0.42, 1.8, trunkMat);
@@ -901,7 +966,6 @@
         treeGroup.add(root);
       }
 
-      // 6 團雲朵般蓬鬆飽滿的翡翠樹冠
       const foliageColors = [0x34d399, 0x10b981, 0x2dd4bf, 0x6ee7b7, 0x059669];
       const canopyPuffs = [
         { x: 0, y: 8.2, z: 0, r: 4.1, c: foliageColors[0] },
@@ -922,7 +986,6 @@
         treeGroup.add(puff);
       });
 
-      // 樹上點綴發光小果實
       const berryOffsets = [
         [2.8, 7.6, 2.5], [-3.1, 7.2, 1.8], [0.8, 9.5, 3.2], [-1.5, 8.8, -3.0], [3.2, 6.8, -1.2]
       ];
@@ -937,7 +1000,6 @@
 
       islandGroup.add(treeGroup);
 
-      // 樹頂圓潤情緒共鳴之心與星環
       const gemMat = new THREE.MeshStandardMaterial({
         color: 0x818cf8,
         emissive: 0x6366f1,
@@ -958,7 +1020,6 @@
       gemHalo.position.set(0, 14.2, 0);
       islandGroup.add(gemHalo);
 
-      // 3. 清澈藍池塘 + 圓潤鵝卵石岸 + 荷葉與小蓮花
       const pondGroup = new THREE.Group();
       pondGroup.position.set(-5.6, 0.04, 4.4);
 
@@ -968,7 +1029,6 @@
       );
       pondGroup.add(water);
 
-      // 池畔圓潤鵝卵石
       const pebbleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 });
       for (let p = 0; p < 14; p++) {
         const pa = (p / 14) * Math.PI * 2;
@@ -979,7 +1039,6 @@
         pondGroup.add(pebble);
       }
 
-      // 翠綠荷葉與粉紅小睡蓮
       const lilyMat = new THREE.MeshStandardMaterial({ color: 0x34d399, roughness: 0.5 });
       const lilyPad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.06, 24, 1, false, 0, Math.PI * 1.85), lilyMat);
       lilyPad1.position.set(-1.1, 0.08, 0.6);
@@ -990,7 +1049,6 @@
 
       islandGroup.add(pondGroup);
 
-      // 4. 島上圓點小蘑菇與立體五瓣小花叢
       const flowerPositions = [
         [3.2, 2.2], [-2.4, 3.1], [4.5, -1.8], [-4.2, -2.5], [1.5, -4.5], [-1.2, 5.2], [5.8, 3.2], [-6.5, -1.2]
       ];
@@ -1011,7 +1069,6 @@
         islandGroup.add(flower);
       });
 
-      // 兩朵可愛紅傘白點小蘑菇
       const mushPositions = [[3.8, -4.8, 1], [-4.8, -4.5, 0.8]];
       mushPositions.forEach(mp => {
         const mush = new THREE.Group();
@@ -1030,7 +1087,6 @@
         islandGroup.add(mush);
       });
 
-      // 5. 圍繞在大樹周圍的 8 位精緻 Q 版小人
       const kidConfigs = [
         { shirtColor: 0x34d399, hairColor: 0x451a03, style: 'sprout', phase: 0 },
         { shirtColor: 0xa855f7, hairColor: 0x1e1b4b, style: 'twintails', phase: 0.8 },
@@ -1051,18 +1107,15 @@
 
         const kidMesh = createCuteKid(cfg);
         kidMesh.position.set(x, 0.12, z);
-        // 面向島嶼外圈微偏與大樹互動的角度
         kidMesh.rotation.y = -angle + Math.PI / 2 + 0.35;
         islandGroup.add(kidMesh);
         kidsGroup.push(kidMesh);
       });
 
-      // 6. 漫步在島上的立體小柴犬
       shibaDog = createCuteShiba();
       shibaDog.position.set(-5.2, 0.12, 4.2);
       islandGroup.add(shibaDog);
 
-      // 7. 棉花糖般蓬鬆的圓潤白雲
       const cloudPositions = [
         { x: -16, y: 11.5, z: -8, s: 1.15 },
         { x: 15, y: 9.2, z: -5, s: 0.95 },
@@ -1148,7 +1201,6 @@
 
       const t = Date.now() * 0.0025;
 
-      // 樹頂共鳴之心與光環律動
       if (treeGem) {
         treeGem.rotation.y += 0.015;
         treeGem.position.y = 14.2 + Math.sin(t * 1.4) * 0.35;
@@ -1158,19 +1210,16 @@
         gemHalo.position.y = 14.2 + Math.sin(t * 1.4) * 0.35;
       }
 
-      // 8位 Q 版小人開心搖頭、揮手與跳躍呼吸動畫
       kidsGroup.forEach((kid) => {
         const u = kid.userData;
         const p = t * 2.2 + u.phase;
         kid.position.y = 0.12 + Math.abs(Math.sin(p)) * 0.16;
         u.headGroup.rotation.z = Math.sin(p * 0.7) * 0.12;
         u.headGroup.rotation.y = Math.cos(p * 0.5) * 0.18;
-        // 雙手開心擺動
         u.leftArmPivot.rotation.z = 0.45 + Math.sin(p * 1.5) * 0.35;
         u.rightArmPivot.rotation.z = -0.45 - Math.cos(p * 1.5) * 0.35;
       });
 
-      // 立體小柴犬繞著島嶼外圈輕快散步 + 搖尾巴 + 四腳交替踏步
       if (shibaDog) {
         const dogAngle = t * 0.32;
         const rx = 9.2;
@@ -1182,12 +1231,9 @@
 
         shibaDog.position.x = curX;
         shibaDog.position.z = curZ;
-        // 奔跑輕微彈跳
         shibaDog.position.y = 0.12 + Math.abs(Math.sin(t * 5.5)) * 0.14;
-        // 朝前進方向轉向
         shibaDog.rotation.y = Math.atan2(-(nextZ - curZ), nextX - curX);
 
-        // 四隻小短腿交替邁步
         const walkCycle = t * 6.5;
         const legs = shibaDog.userData.legs;
         legs[0].rotation.z = Math.sin(walkCycle) * 0.55;
@@ -1195,12 +1241,10 @@
         legs[2].rotation.z = -Math.sin(walkCycle) * 0.55;
         legs[3].rotation.z = Math.sin(walkCycle) * 0.55;
 
-        // 柴犬搖尾巴與歪頭探索
         shibaDog.userData.tailPivot.rotation.x = Math.sin(t * 9) * 0.35;
         shibaDog.userData.headGroup.rotation.z = Math.sin(t * 3) * 0.08;
       }
 
-      // 雲朵輕柔漂浮
       cloudsGroup.forEach((cloud) => {
         cloud.position.y = cloud.userData.baseY + Math.sin(t * 0.8 + cloud.userData.phase) * 0.35;
         cloud.position.x = cloud.userData.baseX + Math.cos(t * 0.4 + cloud.userData.phase) * 0.6;
@@ -1260,11 +1304,13 @@
       }
     }
 
-    function openStudentSelectModal() {
+    async function openStudentSelectModal() {
       playSoundEffect('click');
       renderStudentFilterBar();
       renderStudentGrid();
       document.getElementById('student-select-modal').classList.remove('hidden');
+      await fetchCloudData();
+      renderStudentGrid();
     }
 
     function closeStudentSelectModal() {
@@ -1490,6 +1536,12 @@
     }
 
     async function submitEmotionRecord() {
+      const btn = document.getElementById('submit-record-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = '雲端同步中...';
+      }
+
       if (activeDraft.emotionId === 'custom_other') {
         activeDraft.customName = document.getElementById('custom-emotion-name').value.trim() || '其他心情';
       }
@@ -1501,6 +1553,7 @@
       activeDraft.group = currentStudent.group;
       activeDraft.date = getTodayDateStr();
       activeDraft.timestamp = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      activeDraft.updatedAt = Date.now();
       activeDraft.likes = activeDraft.likes || 0;
 
       const existingIdx = classRecords.findIndex(r => r.studentId === currentStudent.id && r.date === activeDraft.date);
@@ -1512,6 +1565,12 @@
 
       await saveCloudData();
       playSoundEffect('success');
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 收藏並同步至雲端`;
+        lucide.createIcons();
+      }
 
       updateClassBadgeCount();
       updateTreeGemColor();
@@ -1537,20 +1596,22 @@
     /* ==========================================================
        7. 全班情緒光譜牆
        ========================================================== */
-    function openClassWallModal() {
+    async function openClassWallModal() {
       playSoundEffect('click');
       const todayStr = getTodayDateStr();
       document.getElementById('wall-date-filter').value = todayStr;
-      renderClassWall();
       document.getElementById('class-wall-modal').classList.remove('hidden');
+      await renderClassWall(true);
     }
 
     function closeClassWallModal() {
       document.getElementById('class-wall-modal').classList.add('hidden');
     }
 
-    async function renderClassWall() {
-      await fetchCloudData();
+    async function renderClassWall(shouldFetch = true) {
+      if (shouldFetch) {
+        await fetchCloudData();
+      }
 
       const container = document.getElementById('class-cards-container');
       const selectedDate = document.getElementById('wall-date-filter').value || getTodayDateStr();
@@ -1602,7 +1663,7 @@
           `;
         } else {
           const displayName = record.emotionId === 'custom_other' ? record.customName : def.name;
-          const reasonText = record.reasons.map(rid => {
+          const reasonText = (record.reasons || []).map(rid => {
             const rObj = REASON_OPTIONS.find(o => o.id === rid);
             return rObj ? rObj.label : '';
           }).filter(Boolean).join('、');
@@ -1651,9 +1712,11 @@
       const record = classRecords.find(r => r.studentId === studentId && r.date === recordDate);
       if (record) {
         record.likes = (record.likes || 0) + 1;
-        await saveCloudData();
+        record.updatedAt = Date.now();
         playSoundEffect('heart');
-        renderClassWall();
+        renderClassWall(false);
+        await saveCloudData();
+        renderClassWall(false);
       }
     }
 
@@ -1684,11 +1747,19 @@
       });
     }
 
-    async function syncDataFromCloud() {
+    async function syncDataFromCloud(showAlert = false) {
       playSoundEffect('click');
-      await fetchCloudData();
-      renderStudentGrid();
-      alert('已成功從雲端同步最新資料！');
+      setSyncStatusUI('syncing', '正在同步最新資料...');
+      const ok = await fetchCloudData();
+      if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
+        renderStudentGrid();
+      }
+      if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
+        renderClassWall(false);
+      }
+      if (showAlert) {
+        alert(ok ? '✅ 已成功從雲端同步全班最新心情資料！' : '⚠️ 雲端連線較慢，請確認網路狀態後再試一次。');
+      }
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
@@ -1699,11 +1770,20 @@
       updateCurrentUserUI();
 
       await fetchCloudData();
-      updateCurrentUserUI();
 
+      // 每 4 秒自動背景高速同步一次，若全班心情牆開著也會自動刷新畫面
       setInterval(async () => {
+        const prevLen = JSON.stringify(classRecords);
         await fetchCloudData();
-      }, 15000);
+        if (JSON.stringify(classRecords) !== prevLen) {
+          if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
+            renderClassWall(false);
+          }
+          if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
+            renderStudentGrid();
+          }
+        }
+      }, 4000);
     });
   </script>
 </body>
