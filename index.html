@@ -101,7 +101,7 @@
       <!-- 當前登入學生標籤 -->
       <div id="current-user-badge" onclick="openStudentSelectModal()" class="bg-indigo-600/90 hover:bg-indigo-700 text-white backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg cursor-pointer transition-all flex items-center gap-2 border border-indigo-400">
         <i data-lucide="user" class="w-4 h-4"></i>
-        <span id="current-user-name" class="text-xs font-bold">701 邦元</span>
+        <span id="current-user-name" class="text-xs font-bold">請選擇名字</span>
         <i data-lucide="chevron-down" class="w-3 h-3 text-indigo-200"></i>
       </div>
     </div>
@@ -125,7 +125,7 @@
     <div class="pointer-events-auto flex items-center gap-3">
       <button onclick="handleStartCheckInClick()" class="bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white font-bold px-6 py-3.5 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 text-sm border-2 border-white/60">
         <span class="text-xl">✨</span>
-        <span id="checkin-btn-text">記錄 邦元 的心情卡</span>
+        <span id="checkin-btn-text">選擇名字，記錄心情</span>
         <i data-lucide="sparkles" class="w-4 h-4"></i>
       </button>
       <button onclick="resetCameraView()" class="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 flex items-center justify-center text-slate-700 hover:bg-slate-100 transition" title="重置島嶼視角">
@@ -153,7 +153,7 @@
           <h2 class="text-lg font-bold text-slate-800 title-font flex items-center gap-2">
             <span>🎒</span> 班級與導師名冊
           </h2>
-          <p class="text-xs text-slate-500 mt-0.5">請點選你的名字開始記錄今日心情</p>
+          <p class="text-xs text-slate-500 mt-0.5">直接點選自己的名字即可記錄，不需要帳號</p>
         </div>
         <button onclick="closeStudentSelectModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition">
           <i data-lucide="x" class="w-4 h-4"></i>
@@ -237,7 +237,7 @@
           <div class="w-full max-w-md mb-4">
             <label class="block text-xs font-bold text-slate-600 mb-1.5 flex items-center justify-between">
               <span>想多記下一句話嗎？（選填）</span>
-              <span class="text-[11px] text-slate-400 font-normal">留給自己或老師看</span>
+              <span class="text-[11px] text-slate-400 font-normal">留給老師看</span>
             </label>
             <textarea id="note-input" rows="2" placeholder="例如：今天分組時大家有認真聽我說話..." class="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none"></textarea>
           </div>
@@ -249,7 +249,7 @@
               </div>
               <div>
                 <div class="text-xs font-bold text-slate-800">公開在「全班心情牆」</div>
-                <div class="text-[10px] text-slate-400">讓同學看到並為你打氣；關閉則只有老師看得到</div>
+                <div class="text-[10px] text-slate-400">讓同學看到並為你打氣；關閉則只供登入的老師查看</div>
               </div>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -540,11 +540,11 @@
         }
         const {data, error} = await cloudClient.auth.getSession();
         if (error) throw error;
-        if (!data.session) { showCloudLogin(); return; }
-        const result = await cloudClient.from('profiles').select('*').eq('id',data.session.user.id).single();
-        if (result.error) throw new Error('帳號尚未加入班級名冊，請聯絡老師。');
-        cloudProfile = result.data;
-        currentStudent = {id:cloudProfile.student_id, name:cloudProfile.name, seatNo:cloudProfile.seat_no, group:cloudProfile.is_teacher?'老師':cloudProfile.group_name};
+        if (data.session) {
+          const result = await cloudClient.from('profiles').select('*').eq('id',data.session.user.id).single();
+          if (!result.error && result.data.is_teacher) cloudProfile = result.data;
+        }
+        currentStudent = null;
         updateCurrentUserUI();
         addAccountControls();
         cloudClient.auth.onAuthStateChange((event) => {
@@ -558,6 +558,8 @@
             else setSyncStatusUI('error','即時連線中斷，等待重新連線');
           });
         await syncDataFromCloud(false);
+        renderStudentFilterBar(); renderStudentGrid();
+        document.getElementById('student-select-modal').classList.remove('hidden');
         window.addEventListener('online',()=>syncDataFromCloud(false));
         window.addEventListener('offline',()=>setSyncStatusUI('error','已離線，尚未同步'));
         document.addEventListener('visibilitychange',()=> { if (!document.hidden) syncDataFromCloud(false); });
@@ -567,17 +569,18 @@
     }
 
     function showCloudLogin() {
-      setSyncStatusUI('error','請登入班級帳號');
+
       const box = document.createElement('div');
       box.className = 'fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
       box.innerHTML = `<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
-        <h2 class="font-bold text-lg">登入班級情緒島</h2>
+        <h2 class="font-bold text-lg">老師後台登入</h2><p class="text-xs text-slate-500">學生記錄心情不需要登入。老師登入後可查看私人紀錄。</p>
         <input name="email" type="email" autocomplete="username" required placeholder="帳號電子郵件" class="w-full border rounded p-2">
         <input name="password" type="password" autocomplete="current-password" required placeholder="密碼" class="w-full border rounded p-2">
         <p class="text-xs text-red-600" role="alert"></p>
-        <button class="bg-indigo-600 text-white rounded p-2 w-full">登入</button>
+        <button class="bg-indigo-600 text-white rounded p-2 w-full">老師登入</button><button type="button" class="cancel-login bg-slate-100 rounded p-2 w-full">返回點名</button>
       </form>`;
       document.body.appendChild(box);
+      box.querySelector('.cancel-login').onclick = () => box.remove();
       box.querySelector('form').onsubmit = async event => {
         event.preventDefault();
         const form = event.currentTarget, button = form.querySelector('button');
@@ -605,56 +608,31 @@
     }
 
     function addAccountControls() {
-      const actions=document.createElement('div');
-      actions.id='account-controls';
+      const actions=document.createElement('div');actions.id='account-controls';
       actions.className='fixed top-20 right-4 z-40 flex gap-2';
-      const logout=document.createElement('button');
-      logout.textContent='登出'; logout.className='bg-white rounded-xl px-3 py-2 text-xs shadow';
-      logout.onclick=async()=> {await cloudClient.auth.signOut();classRecords=[];location.reload();};
-      actions.appendChild(logout);
-      if(cloudProfile.is_teacher){
-        const manage=document.createElement('button');manage.textContent='建立師生帳號';manage.className=logout.className;
-        manage.onclick=showAccountManager;actions.prepend(manage);
-      }
-      document.body.appendChild(actions);
-    }
-
-    function showAccountManager(){
-      const box=document.createElement('div');box.className='fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
-      box.innerHTML=`<form class="bg-white p-6 rounded-2xl w-full max-w-md space-y-4"><h2 class="font-bold">建立師生帳號</h2><select name="student" class="border p-2 rounded w-full"></select><input name="email" type="email" required placeholder="對方的電子郵件" class="border p-2 rounded w-full"><p class="text-xs">建立後將提供一次性連結，請私下交給本人設定密碼。此操作不會自動寄信。</p><p role="alert" class="text-xs"></p><textarea readonly class="hidden border rounded p-2 w-full text-xs" aria-label="首次登入連結"></textarea><div class="flex gap-2"><button class="bg-indigo-600 text-white p-2 rounded">建立帳號</button><button type="button" class="bg-slate-100 p-2 rounded">關閉</button></div></form>`;
-      for(const student of PRESET_STUDENTS){const opt=document.createElement('option');opt.value=student.id;opt.textContent=student.group+' '+student.name;box.querySelector('select').appendChild(opt);}
-      box.querySelector('[type=button]').onclick=()=>box.remove();
-      box.querySelector('form').onsubmit=async event=>{
-        event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
-        try{
-          const {data,error}=await cloudClient.functions.invoke('class-accounts',{body:{studentId:form.elements.student.value,email:form.elements.email.value}});
-          if(error || data?.error) throw new Error(data?.error || error.message);
-          const output=form.querySelector('textarea');output.value=data.setupUrl;output.classList.remove('hidden');
-          form.querySelector('[role=alert]').textContent='已建立 '+data.name+' 的帳號，請私下傳遞此一次性連結。';
-        }catch(error){form.querySelector('[role=alert]').textContent=error.message;}
-        finally{button.disabled=false;}
-      };
-      document.body.appendChild(box);
+      const button=document.createElement('button');button.className='bg-white rounded-xl px-3 py-2 text-xs shadow';
+      if(cloudProfile?.is_teacher){
+        button.textContent='老師登出';button.onclick=async()=>{await cloudClient.auth.signOut();location.reload();};
+        const label=document.createElement('span');label.className='bg-indigo-50 text-indigo-700 rounded-xl px-3 py-2 text-xs';label.textContent='老師後台已登入';actions.appendChild(label);
+      }else{button.textContent='老師後台';button.onclick=showCloudLogin;}
+      actions.appendChild(button);document.body.appendChild(actions);
     }
 
     async function pushSingleRecordToCloud(record) {
-      if (!cloudClient || !cloudProfile) throw new Error('請先完成資料庫設定並登入。');
+      if(!cloudClient || !currentStudent) throw new Error('請先選擇自己的名字。');
       setSyncStatusUI('syncing','正在等待資料庫確認...');
       try {
-        const {data,error} = await cloudClient.from('emotion_records').upsert({
-          student_id:cloudProfile.student_id, record_date:record.date,
-          owner_id:cloudProfile.id, is_public:record.isPublic,
-          payload:{...record,studentId:cloudProfile.student_id,studentName:cloudProfile.name,group:currentStudent.group,likes:0}
-        },{onConflict:'student_id,record_date'}).select().single();
-        if (error) throw error;
-        if (!data) throw new Error('未收到儲存確認');
+        const {data,error}=await cloudClient.rpc('submit_guest_emotion',{entry:record});
+        if(error) throw error;
+        if(!data?.saved) throw new Error('未收到儲存確認');
+        activeDraft.date=data.date;
         await syncDataFromCloud(false);
-      } catch (error) { setSyncStatusUI('error','儲存未確認，請重試'); throw error; }
+      }catch(error){setSyncStatusUI('error','儲存未確認，請重試');throw error;}
     }
 
     async function syncDataFromCloud(showAlert = false) {
-      if (!cloudClient || !cloudProfile) {
-        if (showAlert) alert('請先連接資料庫並登入。');
+      if (!cloudClient) {
+        if (showAlert) alert('資料庫尚未連接，請稍後重試。');
         return;
       }
       const sequence = ++refreshSequence;
@@ -1437,7 +1415,7 @@
     function updateCurrentUserUI() {
       const badgeText = document.getElementById('current-user-name');
       const btnText = document.getElementById('checkin-btn-text');
-      if (!currentStudent) { badgeText.innerText = '尚未登入'; btnText.innerText = '登入後記錄心情'; return; }
+      if (!currentStudent) { badgeText.innerText = '請選擇名字'; btnText.innerText = '選擇名字，記錄心情'; return; }
 
       badgeText.innerText = `${currentStudent.group} ${currentStudent.name}`;
       const exist = classRecords.find(r => r.studentId === currentStudent.id && r.date === getTodayDateStr());
@@ -1531,10 +1509,9 @@
     }
 
     function selectStudent(studentId) {
-      if (!cloudProfile || studentId !== cloudProfile.student_id) {
-        alert('請使用自己的帳號登入，無法切換成其他師生。'); return;
-      }
-      closeStudentSelectModal();
+      const found=students.find(s=>s.id===studentId);
+      if(!found) return;
+      currentStudent=found;updateCurrentUserUI();playSoundEffect('click');closeStudentSelectModal();
     }
 
     /* ==========================================================
@@ -1758,7 +1735,7 @@
       const selectedDate = document.getElementById('wall-date-filter').value || getTodayDateStr();
       container.innerHTML = '';
 
-      const isTeacher = currentStudent && currentStudent.group === '老師';
+      const isTeacher = !!cloudProfile?.is_teacher;
       const teacherBadge = document.getElementById('teacher-mode-badge');
       if (isTeacher) {
         teacherBadge.classList.remove('hidden');
@@ -1851,11 +1828,14 @@
 
     async function sendHeartToRecord(studentId, recordDate) {
       try {
-        if (!cloudClient || !cloudProfile) throw new Error('請先登入');
-        const {error} = await cloudClient.rpc('give_heart', {target_student:studentId, target_date:recordDate});
-        if (error) throw error;
-        await syncDataFromCloud(false);
-      } catch (error) { alert('打氣未完成：' + error.message); }
+        if(!cloudClient) throw new Error('雲端尚未連接');
+        let device;
+        try {device=localStorage.getItem('emotion_heart_device');if(!device){device=crypto.randomUUID();localStorage.setItem('emotion_heart_device',device);}}
+        catch {device=window.heartDevice || (window.heartDevice=crypto.randomUUID());}
+        const {error}=await cloudClient.rpc('give_guest_heart',{device,target_student:studentId,target_date:recordDate});
+        if(error) throw error;
+        playSoundEffect('heart');await syncDataFromCloud(false);
+      }catch(error){alert('打氣未完成：'+error.message);}
     }
 
     function updateClassBadgeCount() {
