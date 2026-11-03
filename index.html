@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>班級情緒島 - 3D 沉浸式雲端同步平台</title>
   
   <!-- Tailwind CSS CDN -->
@@ -35,6 +35,49 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
+
+    /* Use the visible screen height, including when mobile browser bars or keyboards change. */
+    :root { --app-height: 100vh; }
+    @supports (height: 100dvh) { :root { --app-height: 100dvh; } }
+    html { width: 100%; height: 100%; overflow: hidden; }
+    body { width: 100%; height: var(--app-height); margin: 0; }
+    #app-header { padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+    #app-footer { bottom: calc(16px + env(safe-area-inset-bottom)); }
+    body > .fixed.inset-0 {
+      height: var(--app-height); bottom: auto; box-sizing: border-box;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+    body > .fixed.inset-0 > div, body > .fixed.inset-0 > form { max-height: 100%; min-height: 0; }
+    body > .fixed.inset-0 > form { overflow-y: auto; overscroll-behavior: contain; }
+    .overflow-y-auto { min-height: 0; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    #emotion-flow-modal .overflow-y-auto { justify-content: flex-start; }
+    input, textarea, select { user-select: text; }
+    @media (max-width: 640px) {
+      #app-header { flex-wrap: wrap; gap: 8px; padding-bottom: 8px; }
+      #app-header > div:first-child { width: 100%; justify-content: space-between; gap: 6px; }
+      #app-header > div:first-child > div:first-child { padding: 8px 10px; gap: 6px; min-width: 0; }
+      #app-header h1 { font-size: 14px; }
+      #sync-status-text { font-size: 10px; }
+      #current-user-badge { padding: 8px; gap: 4px; flex-shrink: 0; }
+      #current-user-name { font-size: 11px; }
+      #app-header > div:last-child { margin-left: auto; }
+      #account-controls { top: calc(112px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); }
+      #app-footer { padding: 0 12px; }
+      #app-footer > div { gap: 8px; max-width: 100%; }
+      #app-footer button:first-child { font-size: 12px; padding: 12px 16px; gap: 6px; }
+      #app-footer button:last-child { width: 40px; height: 40px; flex-shrink: 0; }
+      #student-select-modal > div { padding: 16px; }
+      #student-grid { min-height: 0; }
+      #emotion-flow-modal .p-4 { padding: 12px; }
+      #class-wall-modal > div > div:first-child { padding: 12px; gap: 8px; }
+      #class-wall-modal h2 { font-size: 16px; }
+      input, textarea, select { font-size: 16px !important; }
+    }
+    @media (max-height: 500px) {
+      #app-header { padding-top: max(6px, env(safe-area-inset-top)); }
+      #app-footer { bottom: calc(8px + env(safe-area-inset-bottom)); }
+      #emotion-flow-modal .overflow-y-auto { padding-top: 8px; padding-bottom: 8px; }
+    }
   </style>
 </head>
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
@@ -43,7 +86,7 @@
   <div id="canvas-container" class="absolute inset-0 z-0"></div>
 
   <!-- 頂部導航 HUD -->
-  <header class="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center pointer-events-none">
+  <header id="app-header" class="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center pointer-events-none">
     <div class="flex items-center gap-3 pointer-events-auto">
       <div onclick="syncDataFromCloud(true)" class="bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/50 flex items-center gap-2 cursor-pointer hover:bg-white transition" title="點擊立即強制同步">
         <span class="text-2xl">🏝️</span>
@@ -78,7 +121,7 @@
   </header>
 
   <!-- 底部中央主操作引導懸浮按鈕 -->
-  <div class="absolute bottom-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
+  <div id="app-footer" class="absolute bottom-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
     <div class="pointer-events-auto flex items-center gap-3">
       <button onclick="handleStartCheckInClick()" class="bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white font-bold px-6 py-3.5 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 text-sm border-2 border-white/60">
         <span class="text-xl">✨</span>
@@ -288,6 +331,17 @@
 
   <!-- JavaScript 核心邏輯 -->
   <script>
+    function syncVisibleViewport() {
+      const viewport = window.visualViewport;
+      // Do not counteract the user's pinch-to-zoom gesture.
+      if (!viewport || Math.abs(viewport.scale - 1) < 0.01) {
+        document.documentElement.style.setProperty('--app-height', (viewport?.height || window.innerHeight) + 'px');
+      }
+    }
+    syncVisibleViewport();
+    window.addEventListener('resize', syncVisibleViewport);
+    window.visualViewport?.addEventListener('resize', syncVisibleViewport);
+
     function escapeHTML(value) { return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;", "'":"&#39;"}[c])); }
     const PRESET_STUDENTS = [
       { id: 's_701_1', seatNo: '701', name: '邦元', group: '701' },
@@ -552,6 +606,7 @@
 
     function addAccountControls() {
       const actions=document.createElement('div');
+      actions.id='account-controls';
       actions.className='fixed top-20 right-4 z-40 flex gap-2';
       const logout=document.createElement('button');
       logout.textContent='登出'; logout.className='bg-white rounded-xl px-3 py-2 text-xs shadow';
@@ -979,8 +1034,8 @@
 
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
 
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0xdbeafe);
@@ -1243,7 +1298,8 @@
 
       setupInteractionEvents(container);
       animateScene();
-      window.addEventListener('resize', onWindowResize);
+      new ResizeObserver(onWindowResize).observe(container);
+      onWindowResize();
     }
 
     function setupInteractionEvents(dom) {
@@ -1284,10 +1340,15 @@
     }
 
     function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      const container = document.getElementById('canvas-container');
+      const width = container.clientWidth, height = container.clientHeight;
+      if (!width || !height) return;
+      camera.aspect = width / height;
+      // A wider view on portrait phones keeps more of the island in frame.
+      camera.fov = width <= 640 && height > width ? 55 : 40;
       camera.updateProjectionMatrix();
       camera.lookAt(0, 3.2, 0);
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(width, height);
     }
 
     function animateScene() {
