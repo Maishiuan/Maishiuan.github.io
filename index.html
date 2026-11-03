@@ -11,8 +11,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Gun.js 即時跨裝置同步引擎 (免設定、穿透校園網路) -->
-  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <!-- Supabase 資料庫與即時更新 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
+  <script src="cloud-config.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap');
@@ -49,7 +50,7 @@
         <div>
           <h1 class="text-base font-bold text-slate-800 leading-tight title-font">班級情緒島</h1>
           <p id="sync-status-text" class="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ⚡ 雲端即時連線中
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> 正在檢查雲端設定
           </p>
         </div>
       </div>
@@ -227,7 +228,7 @@
             <i data-lucide="sparkles" class="w-8 h-8"></i>
           </div>
           <h3 class="text-xl font-black text-slate-800 title-font">雲端同步成功！</h3>
-          <p class="text-xs text-slate-500 mt-1 max-w-xs">其他同學與老師的手機畫面上已經同步更新囉 ✨</p>
+          <p class="text-xs text-slate-500 mt-1 max-w-xs">資料庫已確認儲存，其他已連線裝置將自動接收更新。</p>
 
           <div id="summary-card-render" class="my-5 w-48 p-4 bg-white rounded-2xl shadow-xl border-2 border-emerald-200"></div>
 
@@ -287,6 +288,7 @@
 
   <!-- JavaScript 核心邏輯 -->
   <script>
+    function escapeHTML(value) { return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;", "'":"&#39;"}[c])); }
     const PRESET_STUDENTS = [
       { id: 's_701_1', seatNo: '701', name: '邦元', group: '701' },
       { id: 's_702_1', seatNo: '702', name: '秉澤', group: '702' },
@@ -386,18 +388,18 @@
     ];
 
     /* ==========================================================
-       2. 雙重即時雲端同步引擎 (Gun.js 即時多中繼站 + LocalStorage 備援)
+       2. Supabase 帳號與即時雲端同步
        ========================================================== */
     const LOCAL_STORAGE_KEY = 'maishiuan_emotion_island_v3';
     const GUN_ROOM_NAME = 'maishiuan_class_emotion_island_2026_v3';
 
     let students = PRESET_STUDENTS;
-    let currentStudent = students[0];
+    let currentStudent = null;
     let classRecords = [];
     let isSoundOn = true;
     let activeCategoryFilter = '全部';
-    let gunDB = null;
-    let gunRecordsNode = null;
+
+
 
     let activeDraft = {
       emotionId: 'anticipation',
@@ -446,9 +448,7 @@
       }
 
       if (changed) {
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
-        } catch (e) {}
+
         updateClassBadgeCount();
         updateTreeGemColor();
         updateCurrentUserUI();
@@ -465,109 +465,160 @@
       return changed;
     }
 
-    // 初始化 Gun.js 多重公開 Relay 伺服器
-    function initRealtimeCloud() {
-      // 1. 先載入本機快取
+    let cloudClient = null, cloudProfile = null, cloudChannel = null;
+    let refreshSequence = 0, channelConnected = false;
+
+    async function initRealtimeCloud() {
+      const config = window.EMOTION_CLOUD;
+      if (!config?.url || !config?.publishableKey) {
+        setSyncStatusUI('error', '尚未連接資料庫');
+        document.getElementById('submit-record-btn').disabled = true;
+        return;
+      }
       try {
-        const localRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (localRaw) {
-          const parsed = JSON.parse(localRaw);
-          if (Array.isArray(parsed)) {
-            parsed.forEach(item => upsertRecordInMemory(item));
-          }
+        cloudClient = supabase.createClient(config.url, config.publishableKey);
+        const setupToken = new URLSearchParams(location.hash.slice(1)).get('setup');
+        if (setupToken) {
+          history.replaceState(null,'',location.pathname);
+          const {error} = await cloudClient.auth.verifyOtp({token_hash:setupToken,type:'recovery'});
+          if (error) throw new Error('首次登入連結已過期或已使用，請聯絡老師重新設定。');
+          showPasswordSetup(); return;
         }
-      } catch (e) {}
-
-      // 2. 連接多個高可用度公開 WebSocket 中繼站
-      try {
-        if (typeof Gun !== 'undefined') {
-          gunDB = Gun({
-            peers: [
-              'https://gun-manhattan.herokuapp.com/gun',
-              'https://relay.peer.ooo/gun',
-              'https://peer.wallie.io/gun',
-              'https://gun.defucc.me/gun'
-            ],
-            localStorage: false
-          });
-
-          gunRecordsNode = gunDB.get(GUN_ROOM_NAME).get('records');
-
-          // 監聽任何一筆同學打卡紀錄的即時變更
-          gunRecordsNode.map().on((data, key) => {
-            if (!data || !data.payload) return;
-            try {
-              const parsed = JSON.parse(data.payload);
-              upsertRecordInMemory(parsed);
-              setSyncStatusUI('ok', '⚡ 雲端即時同步中');
-            } catch (err) {}
-          });
-
-          setSyncStatusUI('ok', '⚡ 雲端即時同步中');
-        }
-      } catch (e) {
-        console.warn('Gun init error:', e);
-      }
-    }
-
-    // 寫入單筆紀錄到即時雲端
-    async function pushSingleRecordToCloud(record) {
-      setSyncStatusUI('syncing', '正在同步至雲端...');
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
-      } catch (e) {}
-
-      const recordKey = `${record.studentId}_${record.date}`;
-      if (gunRecordsNode) {
-        gunRecordsNode.get(recordKey).put({
-          payload: JSON.stringify(record),
-          updatedAt: record.updatedAt || Date.now()
-        });
-      }
-
-      setTimeout(() => {
-        setSyncStatusUI('ok', '⚡ 雲端即時同步中');
-      }, 400);
-    }
-
-    // 手動觸發全量重播與拉取
-    function syncDataFromCloud(showAlert = false) {
-      playSoundEffect('click');
-      setSyncStatusUI('syncing', '正在同步最新資料...');
-
-      if (gunRecordsNode) {
-        // 將本機有的紀錄推送確保同步，並重新讀取雲端所有節點
-        classRecords.forEach(r => {
-          const key = `${r.studentId}_${r.date}`;
-          gunRecordsNode.get(key).put({
-            payload: JSON.stringify(r),
-            updatedAt: r.updatedAt || Date.now()
-          });
-        });
-
-        gunRecordsNode.map().once((data) => {
-          if (data && data.payload) {
-            try {
-              upsertRecordInMemory(JSON.parse(data.payload));
-            } catch (e) {}
-          }
-        });
-      }
-
-      setTimeout(() => {
-        setSyncStatusUI('ok', '⚡ 雲端即時同步中');
-        updateClassBadgeCount();
+        const {data, error} = await cloudClient.auth.getSession();
+        if (error) throw error;
+        if (!data.session) { showCloudLogin(); return; }
+        const result = await cloudClient.from('profiles').select('*').eq('id',data.session.user.id).single();
+        if (result.error) throw new Error('帳號尚未加入班級名冊，請聯絡老師。');
+        cloudProfile = result.data;
+        currentStudent = {id:cloudProfile.student_id, name:cloudProfile.name, seatNo:cloudProfile.seat_no, group:cloudProfile.is_teacher?'老師':cloudProfile.group_name};
         updateCurrentUserUI();
-        if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
-          renderStudentGrid();
-        }
-        if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
-          renderClassWall();
-        }
-        if (showAlert) {
-          alert('✅ 已完成雲端即時同步！');
-        }
-      }, 500);
+        addAccountControls();
+        cloudClient.auth.onAuthStateChange((event) => {
+          if (event === 'SIGNED_OUT') location.reload();
+        });
+        cloudChannel = cloudClient.channel('class-records')
+          .on('postgres_changes',{event:'*',schema:'public',table:'emotion_records'},()=>syncDataFromCloud(false))
+          .subscribe(status => {
+            channelConnected = status === 'SUBSCRIBED';
+            if (channelConnected) syncDataFromCloud(false);
+            else setSyncStatusUI('error','即時連線中斷，等待重新連線');
+          });
+        await syncDataFromCloud(false);
+        window.addEventListener('online',()=>syncDataFromCloud(false));
+        window.addEventListener('offline',()=>setSyncStatusUI('error','已離線，尚未同步'));
+        document.addEventListener('visibilitychange',()=> { if (!document.hidden) syncDataFromCloud(false); });
+        // RLS may withhold events after a record becomes private; periodically reconcile visible data.
+        setInterval(()=> { if (!document.hidden && navigator.onLine) syncDataFromCloud(false); },15000);
+      } catch (error) { setSyncStatusUI('error','登入或連線失敗'); alert(error.message); }
+    }
+
+    function showCloudLogin() {
+      setSyncStatusUI('error','請登入班級帳號');
+      const box = document.createElement('div');
+      box.className = 'fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
+      box.innerHTML = `<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
+        <h2 class="font-bold text-lg">登入班級情緒島</h2>
+        <input name="email" type="email" autocomplete="username" required placeholder="帳號電子郵件" class="w-full border rounded p-2">
+        <input name="password" type="password" autocomplete="current-password" required placeholder="密碼" class="w-full border rounded p-2">
+        <p class="text-xs text-red-600" role="alert"></p>
+        <button class="bg-indigo-600 text-white rounded p-2 w-full">登入</button>
+      </form>`;
+      document.body.appendChild(box);
+      box.querySelector('form').onsubmit = async event => {
+        event.preventDefault();
+        const form = event.currentTarget, button = form.querySelector('button');
+        button.disabled = true;
+        try {
+          const {error} = await cloudClient.auth.signInWithPassword({email:form.elements.email.value.trim(), password:form.elements.password.value});
+          if (error) throw error;
+          location.reload();
+        } catch (error) { form.querySelector('[role=alert]').textContent = error.message; button.disabled = false; }
+      };
+    }
+
+    function showPasswordSetup() {
+      const box=document.createElement('div');
+      box.className='fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
+      box.innerHTML=`<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h2 class="font-bold">設定你的登入密碼</h2><p class="text-xs">首次登入連結只能使用一次。請設定至少 12 個字元的密碼。</p><input name="password" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="新密碼"><input name="confirm" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="再次輸入密碼"><p role="alert" class="text-red-600 text-xs"></p><button class="bg-indigo-600 text-white p-2 rounded w-full">儲存密碼並登入</button></form>`;
+      document.body.appendChild(box);
+      box.querySelector('form').onsubmit=async event=>{
+        event.preventDefault(); const form=event.currentTarget;
+        if(form.elements.password.value!==form.elements.confirm.value){form.querySelector('[role=alert]').textContent='兩次密碼不同';return;}
+        const {error}=await cloudClient.auth.updateUser({password:form.elements.password.value});
+        if(error){form.querySelector('[role=alert]').textContent=error.message;return;}
+        location.reload();
+      };
+    }
+
+    function addAccountControls() {
+      const actions=document.createElement('div');
+      actions.className='fixed top-20 right-4 z-40 flex gap-2';
+      const logout=document.createElement('button');
+      logout.textContent='登出'; logout.className='bg-white rounded-xl px-3 py-2 text-xs shadow';
+      logout.onclick=async()=> {await cloudClient.auth.signOut();classRecords=[];location.reload();};
+      actions.appendChild(logout);
+      if(cloudProfile.is_teacher){
+        const manage=document.createElement('button');manage.textContent='建立師生帳號';manage.className=logout.className;
+        manage.onclick=showAccountManager;actions.prepend(manage);
+      }
+      document.body.appendChild(actions);
+    }
+
+    function showAccountManager(){
+      const box=document.createElement('div');box.className='fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
+      box.innerHTML=`<form class="bg-white p-6 rounded-2xl w-full max-w-md space-y-4"><h2 class="font-bold">建立師生帳號</h2><select name="student" class="border p-2 rounded w-full"></select><input name="email" type="email" required placeholder="對方的電子郵件" class="border p-2 rounded w-full"><p class="text-xs">建立後將提供一次性連結，請私下交給本人設定密碼。此操作不會自動寄信。</p><p role="alert" class="text-xs"></p><textarea readonly class="hidden border rounded p-2 w-full text-xs" aria-label="首次登入連結"></textarea><div class="flex gap-2"><button class="bg-indigo-600 text-white p-2 rounded">建立帳號</button><button type="button" class="bg-slate-100 p-2 rounded">關閉</button></div></form>`;
+      for(const student of PRESET_STUDENTS){const opt=document.createElement('option');opt.value=student.id;opt.textContent=student.group+' '+student.name;box.querySelector('select').appendChild(opt);}
+      box.querySelector('[type=button]').onclick=()=>box.remove();
+      box.querySelector('form').onsubmit=async event=>{
+        event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+        try{
+          const {data,error}=await cloudClient.functions.invoke('class-accounts',{body:{studentId:form.elements.student.value,email:form.elements.email.value}});
+          if(error || data?.error) throw new Error(data?.error || error.message);
+          const output=form.querySelector('textarea');output.value=data.setupUrl;output.classList.remove('hidden');
+          form.querySelector('[role=alert]').textContent='已建立 '+data.name+' 的帳號，請私下傳遞此一次性連結。';
+        }catch(error){form.querySelector('[role=alert]').textContent=error.message;}
+        finally{button.disabled=false;}
+      };
+      document.body.appendChild(box);
+    }
+
+    async function pushSingleRecordToCloud(record) {
+      if (!cloudClient || !cloudProfile) throw new Error('請先完成資料庫設定並登入。');
+      setSyncStatusUI('syncing','正在等待資料庫確認...');
+      try {
+        const {data,error} = await cloudClient.from('emotion_records').upsert({
+          student_id:cloudProfile.student_id, record_date:record.date,
+          owner_id:cloudProfile.id, is_public:record.isPublic,
+          payload:{...record,studentId:cloudProfile.student_id,studentName:cloudProfile.name,group:currentStudent.group,likes:0}
+        },{onConflict:'student_id,record_date'}).select().single();
+        if (error) throw error;
+        if (!data) throw new Error('未收到儲存確認');
+        await syncDataFromCloud(false);
+      } catch (error) { setSyncStatusUI('error','儲存未確認，請重試'); throw error; }
+    }
+
+    async function syncDataFromCloud(showAlert = false) {
+      if (!cloudClient || !cloudProfile) {
+        if (showAlert) alert('請先連接資料庫並登入。');
+        return;
+      }
+      const sequence = ++refreshSequence;
+      setSyncStatusUI('syncing','正在讀取雲端資料...');
+      try {
+        const {data,error} = await cloudClient.from('emotion_records').select('*').order('record_date',{ascending:false}).limit(1000);
+        if (error) throw error;
+        if (sequence !== refreshSequence) return;
+        classRecords = data.map(row=>({...row.payload,studentId:row.student_id,date:row.record_date,isPublic:row.is_public,likes:row.likes,intensity:Math.max(1,Math.min(5,Number(row.payload.intensity)||3)),reasons:Array.isArray(row.payload.reasons)?row.payload.reasons:[]}));
+        updateClassBadgeCount(); updateTreeGemColor(); updateCurrentUserUI();
+        if (!document.getElementById('student-select-modal').classList.contains('hidden')) renderStudentGrid();
+        if (!document.getElementById('class-wall-modal').classList.contains('hidden')) renderClassWall();
+        setSyncStatusUI(channelConnected?'ok':'error',channelConnected?'雲端已連線，資料已更新':'資料已讀取，即時連線恢復中');
+        if (showAlert) alert('已從資料庫重新讀取目前可查看的紀錄。');
+      } catch (error) {
+        if (sequence !== refreshSequence) return;
+        setSyncStatusUI('error','讀取失敗，尚未同步');
+        if (showAlert) alert('同步失敗：'+error.message);
+      }
     }
 
     /* ==========================================================
@@ -1325,7 +1376,7 @@
     function updateCurrentUserUI() {
       const badgeText = document.getElementById('current-user-name');
       const btnText = document.getElementById('checkin-btn-text');
-      if (!currentStudent) return;
+      if (!currentStudent) { badgeText.innerText = '尚未登入'; btnText.innerText = '登入後記錄心情'; return; }
 
       badgeText.innerText = `${currentStudent.group} ${currentStudent.name}`;
       const exist = classRecords.find(r => r.studentId === currentStudent.id && r.date === getTodayDateStr());
@@ -1419,11 +1470,8 @@
     }
 
     function selectStudent(studentId) {
-      const found = students.find(s => s.id === studentId);
-      if (found) {
-        currentStudent = found;
-        updateCurrentUserUI();
-        playSoundEffect('click');
+      if (!cloudProfile || studentId !== cloudProfile.student_id) {
+        alert('請使用自己的帳號登入，無法切換成其他師生。'); return;
       }
       closeStudentSelectModal();
     }
@@ -1603,7 +1651,8 @@
         classRecords.push(finalRecord);
       }
 
-      await pushSingleRecordToCloud(finalRecord);
+      try { await pushSingleRecordToCloud(finalRecord); }
+      catch (error) { alert('尚未完成雲端儲存，請保留此頁並重試。' + error.message); return; }
       playSoundEffect('success');
 
       updateClassBadgeCount();
@@ -1619,10 +1668,10 @@
       const displayName = activeDraft.emotionId === 'custom_other' ? activeDraft.customName : def.name;
       summary.innerHTML = `
         <div class="w-16 h-16 mx-auto mb-2">${def.svg}</div>
-        <div class="font-black text-slate-800 text-base title-font">${displayName}</div>
+        <div class="font-black text-slate-800 text-base title-font">${escapeHTML(displayName)}</div>
         <div class="text-[11px] text-slate-500 font-bold mt-1">強度：${'⭐'.repeat(activeDraft.intensity)}</div>
         <div class="text-[10px] text-slate-600 mt-2 line-clamp-2 bg-white/70 p-1.5 rounded-lg">
-          ${activeDraft.note || '今日給自己的專屬時光'}
+          ${escapeHTML(activeDraft.note || '今日給自己的專屬時光')}
         </div>
       `;
     }
@@ -1682,7 +1731,7 @@
         if (isHidden) {
           card.innerHTML = `
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-slate-400">${record.group} ${record.studentName}</span>
+              <span class="text-xs font-bold text-slate-400">${escapeHTML(record.group)} ${escapeHTML(record.studentName)}</span>
               <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <i data-lucide="lock" class="w-3 h-3"></i> 老師悄悄話
               </span>
@@ -1690,7 +1739,7 @@
             <div class="py-4 text-center text-slate-400 text-xs font-medium">
               這位同學將心情留給了自己與老師 🔒
             </div>
-            <div class="text-[10px] text-slate-400 text-right">${record.timestamp}</div>
+            <div class="text-[10px] text-slate-400 text-right">${escapeHTML(record.timestamp)}</div>
           `;
         } else {
           const displayName = record.emotionId === 'custom_other' ? record.customName : def.name;
@@ -1702,19 +1751,19 @@
           card.innerHTML = `
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[11px] font-mono">${record.group}</span>
-                <span class="font-bold text-xs text-slate-800">${record.studentName}</span>
+                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[11px] font-mono">${escapeHTML(record.group)}</span>
+                <span class="font-bold text-xs text-slate-800">${escapeHTML(record.studentName)}</span>
                 ${isSelf ? '<span class="text-[9px] bg-indigo-50 text-indigo-600 px-1.5 py-0.2 rounded font-bold">我</span>' : ''}
                 ${!record.isPublic && isTeacher ? '<span class="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.2 rounded font-bold">悄悄話</span>' : ''}
               </div>
-              <span class="text-[10px] text-slate-400">${record.timestamp}</span>
+              <span class="text-[10px] text-slate-400">${escapeHTML(record.timestamp)}</span>
             </div>
 
             <div class="flex items-center gap-3 p-2.5 rounded-xl" style="background-color: ${def.bg}">
               <div class="w-12 h-12 shrink-0">${def.svg}</div>
               <div>
                 <div class="text-xs font-black text-slate-800 title-font flex items-center gap-1">
-                  <span>${displayName}</span>
+                  <span>${escapeHTML(displayName)}</span>
                   <span class="text-[10px] text-amber-500 font-bold">${'★'.repeat(record.intensity)}</span>
                 </div>
                 <div class="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
@@ -1723,7 +1772,7 @@
               </div>
             </div>
 
-            ${record.note ? `<div class="text-xs text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">“${record.note}”</div>` : ''}
+            ${record.note ? `<div class="text-xs text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 italic">“${escapeHTML(record.note)}”</div>` : ''}
 
             <div class="flex items-center justify-between pt-2 border-t border-slate-50 text-xs">
               <span class="text-[11px] text-slate-400">為同學打氣</span>
@@ -1740,14 +1789,12 @@
     }
 
     async function sendHeartToRecord(studentId, recordDate) {
-      const record = classRecords.find(r => r.studentId === studentId && r.date === recordDate);
-      if (record) {
-        record.likes = (record.likes || 0) + 1;
-        record.updatedAt = Date.now();
-        playSoundEffect('heart');
-        renderClassWall();
-        await pushSingleRecordToCloud(record);
-      }
+      try {
+        if (!cloudClient || !cloudProfile) throw new Error('請先登入');
+        const {error} = await cloudClient.rpc('give_heart', {target_student:studentId, target_date:recordDate});
+        if (error) throw error;
+        await syncDataFromCloud(false);
+      } catch (error) { alert('打氣未完成：' + error.message); }
     }
 
     function updateClassBadgeCount() {
@@ -1781,7 +1828,7 @@
       initThreeScene();
       lucide.createIcons();
       
-      currentStudent = students[0];
+      currentStudent = null;
       updateCurrentUserUI();
 
       // 啟動即時分散式雲端同步
@@ -1790,3 +1837,4 @@
   </script>
 </body>
 </html>
+
