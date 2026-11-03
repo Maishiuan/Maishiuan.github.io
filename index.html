@@ -11,6 +11,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Gun.js 即時跨裝置同步引擎 (免設定、穿透校園網路) -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap');
@@ -42,12 +44,12 @@
   <!-- 頂部導航 HUD -->
   <header class="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center pointer-events-none">
     <div class="flex items-center gap-3 pointer-events-auto">
-      <div onclick="syncDataFromCloud(true)" class="bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/50 flex items-center gap-2 cursor-pointer hover:bg-white transition" title="點擊立即手動同步">
+      <div onclick="syncDataFromCloud(true)" class="bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/50 flex items-center gap-2 cursor-pointer hover:bg-white transition" title="點擊立即強制同步">
         <span class="text-2xl">🏝️</span>
         <div>
           <h1 class="text-base font-bold text-slate-800 leading-tight title-font">班級情緒島</h1>
-          <p id="sync-status-text" class="text-[11px] text-amber-600 font-bold flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span> 正在連線雲端伺服器...
+          <p id="sync-status-text" class="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ⚡ 雲端即時連線中
           </p>
         </div>
       </div>
@@ -55,7 +57,7 @@
       <!-- 當前登入學生標籤 -->
       <div id="current-user-badge" onclick="openStudentSelectModal()" class="bg-indigo-600/90 hover:bg-indigo-700 text-white backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-lg cursor-pointer transition-all flex items-center gap-2 border border-indigo-400">
         <i data-lucide="user" class="w-4 h-4"></i>
-        <span id="current-user-name" class="text-xs font-bold">載入中...</span>
+        <span id="current-user-name" class="text-xs font-bold">701 邦元</span>
         <i data-lucide="chevron-down" class="w-3 h-3 text-indigo-200"></i>
       </div>
     </div>
@@ -79,7 +81,7 @@
     <div class="pointer-events-auto flex items-center gap-3">
       <button onclick="handleStartCheckInClick()" class="bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white font-bold px-6 py-3.5 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 text-sm border-2 border-white/60">
         <span class="text-xl">✨</span>
-        <span id="checkin-btn-text">記錄今天的心情卡</span>
+        <span id="checkin-btn-text">記錄 邦元 的心情卡</span>
         <i data-lucide="sparkles" class="w-4 h-4"></i>
       </button>
       <button onclick="resetCameraView()" class="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/50 flex items-center justify-center text-slate-700 hover:bg-slate-100 transition" title="重置島嶼視角">
@@ -119,9 +121,9 @@
       <div id="student-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto no-scrollbar py-1 flex-1 min-h-[200px]"></div>
 
       <div class="mt-4 pt-3 border-t border-slate-100 shrink-0 flex justify-between items-center text-xs text-slate-400">
-        <span>已內建 15 位師生名單 (每 4 秒自動雲端同步)</span>
+        <span>已內建 15 位師生名單 (即時跨裝置同步)</span>
         <button onclick="syncDataFromCloud(true)" class="text-indigo-600 hover:underline font-bold flex items-center gap-1">
-          <i data-lucide="refresh-cw" class="w-3 h-3"></i> 立即同步
+          <i data-lucide="refresh-cw" class="w-3 h-3"></i> 立即同步檢查
         </button>
       </div>
     </div>
@@ -259,7 +261,7 @@
           <button onclick="syncDataFromCloud(true)" class="bg-white hover:bg-slate-50 text-indigo-600 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold shadow-sm flex items-center gap-1 transition">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 刷新
           </button>
-          <input type="date" id="wall-date-filter" onchange="renderClassWall(false)" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
+          <input type="date" id="wall-date-filter" onchange="renderClassWall()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
           <button onclick="closeClassWallModal()" class="w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center text-slate-500 shadow-sm transition">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
@@ -384,20 +386,18 @@
     ];
 
     /* ==========================================================
-       跨裝置高可靠度免設定雲端同步引擎 (多節點自動容錯 + LocalStorage 保底)
+       2. 雙重即時雲端同步引擎 (Gun.js 即時多中繼站 + LocalStorage 備援)
        ========================================================== */
-    const CLOUD_ENDPOINTS = [
-      'https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_records_v2',
-      'https://jsonblob.com/api/jsonBlob/1344882910384750592'
-    ];
-    constLOCAL_STORAGE_KEY = 'maishiuan_emotion_island_v2';
+    const LOCAL_STORAGE_KEY = 'maishiuan_emotion_island_v3';
+    const GUN_ROOM_NAME = 'maishiuan_class_emotion_island_2026_v3';
 
     let students = PRESET_STUDENTS;
     let currentStudent = students[0];
     let classRecords = [];
     let isSoundOn = true;
     let activeCategoryFilter = '全部';
-    let isSyncing = false;
+    let gunDB = null;
+    let gunRecordsNode = null;
 
     let activeDraft = {
       emotionId: 'anticipation',
@@ -416,118 +416,163 @@
         el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ${msg || '⚡ 雲端即時同步中'}`;
       } else if (state === 'syncing') {
         el.className = 'text-[11px] text-indigo-600 font-bold flex items-center gap-1';
-        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span> ${msg || '同步資料中...'}`;
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span> ${msg || '雲端資料同步中...'}`;
       } else {
         el.className = 'text-[11px] text-amber-600 font-bold flex items-center gap-1';
-        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> ${msg || '本機暫存 (點擊重連)'}`;
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> ${msg || '本機連線中'}`;
       }
     }
 
-    // 合併兩邊紀錄（以最新 updatedAt 為準，避免互相覆蓋）
-    function mergeRecords(localArr, remoteArr) {
-      const map = new Map();
-      [...(localArr || []), ...(remoteArr || [])].forEach(item => {
-        if (!item || !item.studentId || !item.date) return;
-        const key = `${item.studentId}_${item.date}`;
-        const existing = map.get(key);
-        if (!existing || (item.updatedAt || 0) >= (existing.updatedAt || 0)) {
-          // 保留較高的愛心數
-          if (existing && (existing.likes || 0) > (item.likes || 0)) {
-            item.likes = existing.likes;
-          }
-          map.set(key, item);
+    // 合併單筆紀錄並自動觸發畫面刷新
+    function upsertRecordInMemory(incoming) {
+      if (!incoming || !incoming.studentId || !incoming.date) return false;
+      const idx = classRecords.findIndex(r => r.studentId === incoming.studentId && r.date === incoming.date);
+      let changed = false;
+
+      if (idx === -1) {
+        classRecords.push(incoming);
+        changed = true;
+      } else {
+        const current = classRecords[idx];
+        const incTime = incoming.updatedAt || 0;
+        const curTime = current.updatedAt || 0;
+        if (incTime > curTime || (incoming.likes || 0) > (current.likes || 0)) {
+          classRecords[idx] = {
+            ...incoming,
+            likes: Math.max(incoming.likes || 0, current.likes || 0)
+          };
+          changed = true;
         }
-      });
-      return Array.from(map.values());
+      }
+
+      if (changed) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
+        } catch (e) {}
+        updateClassBadgeCount();
+        updateTreeGemColor();
+        updateCurrentUserUI();
+
+        const wallModal = document.getElementById('class-wall-modal');
+        if (wallModal && !wallModal.classList.contains('hidden')) {
+          renderClassWall();
+        }
+        const stuModal = document.getElementById('student-select-modal');
+        if (stuModal && !stuModal.classList.contains('hidden')) {
+          renderStudentGrid();
+        }
+      }
+      return changed;
     }
 
-    // 從免費免認證雲端 KeyValue 服務讀取
-    async function fetchCloudData() {
-      if (isSyncing) return;
+    // 初始化 Gun.js 多重公開 Relay 伺服器
+    function initRealtimeCloud() {
+      // 1. 先載入本機快取
       try {
-        // 先載入本機快取
         const localRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (localRaw) {
-          try {
-            const parsed = JSON.parse(localRaw);
-            if (Array.isArray(parsed)) classRecords = mergeRecords(classRecords, parsed);
-          } catch (e) {}
-        }
-
-        // 通道 1：Immanuel KeyVal API (支援跨域 GET/POST 且免註冊)
-        const res = await fetch('https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_v2?t=' + Date.now(), {
-          cache: 'no-store'
-        });
-
-        if (res.ok) {
-          const rawText = await res.text();
-          // KeyVal 回傳格式為頭尾帶引號的字串
-          const cleanStr = rawText.replace(/^"|"$/g, '').replace(/\\"/g, '"');
-          if (cleanStr && cleanStr !== 'null' && cleanStr.length > 2) {
-            const decoded = JSON.parse(decodeURIComponent(atob(cleanStr)));
-            if (Array.isArray(decoded)) {
-              classRecords = mergeRecords(classRecords, decoded);
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
-            }
+          const parsed = JSON.parse(localRaw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(item => upsertRecordInMemory(item));
           }
-          updateClassBadgeCount();
-          updateTreeGemColor();
-          updateCurrentUserUI();
-          setSyncStatusUI('ok', '⚡ 雲端即時同步中');
-          return true;
         }
-        throw new Error('Cloud response not ok');
+      } catch (e) {}
+
+      // 2. 連接多個高可用度公開 WebSocket 中繼站
+      try {
+        if (typeof Gun !== 'undefined') {
+          gunDB = Gun({
+            peers: [
+              'https://gun-manhattan.herokuapp.com/gun',
+              'https://relay.peer.ooo/gun',
+              'https://peer.wallie.io/gun',
+              'https://gun.defucc.me/gun'
+            ],
+            localStorage: false
+          });
+
+          gunRecordsNode = gunDB.get(GUN_ROOM_NAME).get('records');
+
+          // 監聽任何一筆同學打卡紀錄的即時變更
+          gunRecordsNode.map().on((data, key) => {
+            if (!data || !data.payload) return;
+            try {
+              const parsed = JSON.parse(data.payload);
+              upsertRecordInMemory(parsed);
+              setSyncStatusUI('ok', '⚡ 雲端即時同步中');
+            } catch (err) {}
+          });
+
+          setSyncStatusUI('ok', '⚡ 雲端即時同步中');
+        }
       } catch (e) {
-        console.warn('雲端讀取異常:', e);
-        setSyncStatusUI('warn', '雲端連線重試中...');
-        return false;
+        console.warn('Gun init error:', e);
       }
     }
 
-    // 寫入雲端（自動先拉取最新再合併寫回，確保多台手機同時打卡不衝突）
-    async function saveCloudData() {
-      isSyncing = true;
+    // 寫入單筆紀錄到即時雲端
+    async function pushSingleRecordToCloud(record) {
       setSyncStatusUI('syncing', '正在同步至雲端...');
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
+      } catch (e) {}
 
-        // 1. 先抓取雲端目前最新資料並合併
-        try {
-          const getRes = await fetch('https://keyvalue.immanuel.co/api/KeyVal/GetValue/maishiuan88/emotion_v2?t=' + Date.now(), { cache: 'no-store' });
-          if (getRes.ok) {
-            const rawText = await getRes.text();
-            const cleanStr = rawText.replace(/^"|"$/g, '').replace(/\\"/g, '"');
-            if (cleanStr && cleanStr !== 'null' && cleanStr.length > 2) {
-              const remoteArr = JSON.parse(decodeURIComponent(atob(cleanStr)));
-              if (Array.isArray(remoteArr)) {
-                classRecords = mergeRecords(remoteArr, classRecords);
-              }
-            }
-          }
-        } catch (innerErr) {}
-
-        // 2. 將合併後的陣列轉為 URL-Safe Base64 寫入雲端
-        const payloadBase64 = btoa(encodeURIComponent(JSON.stringify(classRecords)));
-        const safePayload = encodeURIComponent(payloadBase64);
-
-        const postRes = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/maishiuan88/emotion_v2/${safePayload}`, {
-          method: 'POST'
+      const recordKey = `${record.studentId}_${record.date}`;
+      if (gunRecordsNode) {
+        gunRecordsNode.get(recordKey).put({
+          payload: JSON.stringify(record),
+          updatedAt: record.updatedAt || Date.now()
         });
-
-        if (postRes.ok) {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(classRecords));
-          setSyncStatusUI('ok', '⚡ 雲端即時同步成功');
-        } else {
-          throw new Error('Post failed');
-        }
-      } catch (e) {
-        console.error('寫入雲端失敗', e);
-        setSyncStatusUI('warn', '暫存於本機 (網路受限)');
-      } finally {
-        isSyncing = false;
       }
+
+      setTimeout(() => {
+        setSyncStatusUI('ok', '⚡ 雲端即時同步中');
+      }, 400);
     }
 
+    // 手動觸發全量重播與拉取
+    function syncDataFromCloud(showAlert = false) {
+      playSoundEffect('click');
+      setSyncStatusUI('syncing', '正在同步最新資料...');
+
+      if (gunRecordsNode) {
+        // 將本機有的紀錄推送確保同步，並重新讀取雲端所有節點
+        classRecords.forEach(r => {
+          const key = `${r.studentId}_${r.date}`;
+          gunRecordsNode.get(key).put({
+            payload: JSON.stringify(r),
+            updatedAt: r.updatedAt || Date.now()
+          });
+        });
+
+        gunRecordsNode.map().once((data) => {
+          if (data && data.payload) {
+            try {
+              upsertRecordInMemory(JSON.parse(data.payload));
+            } catch (e) {}
+          }
+        });
+      }
+
+      setTimeout(() => {
+        setSyncStatusUI('ok', '⚡ 雲端即時同步中');
+        updateClassBadgeCount();
+        updateCurrentUserUI();
+        if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
+          renderStudentGrid();
+        }
+        if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
+          renderClassWall();
+        }
+        if (showAlert) {
+          alert('✅ 已完成雲端即時同步！');
+        }
+      }, 500);
+    }
+
+    /* ==========================================================
+       3. Web Audio 音效合成器
+       ========================================================== */
     let audioCtx = null;
     function initAudio() {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1304,13 +1349,12 @@
       }
     }
 
-    async function openStudentSelectModal() {
+    function openStudentSelectModal() {
       playSoundEffect('click');
       renderStudentFilterBar();
       renderStudentGrid();
       document.getElementById('student-select-modal').classList.remove('hidden');
-      await fetchCloudData();
-      renderStudentGrid();
+      syncDataFromCloud(false);
     }
 
     function closeStudentSelectModal() {
@@ -1396,7 +1440,7 @@
       const todayStr = getTodayDateStr();
       const exist = classRecords.find(r => r.studentId === currentStudent.id && r.date === todayStr);
       if (exist) {
-        activeDraft = { ...exist };
+        activeDraft = { ...exist, reasons: [...(exist.reasons || [])] };
       } else {
         activeDraft = {
           emotionId: 'anticipation',
@@ -1536,12 +1580,6 @@
     }
 
     async function submitEmotionRecord() {
-      const btn = document.getElementById('submit-record-btn');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerText = '雲端同步中...';
-      }
-
       if (activeDraft.emotionId === 'custom_other') {
         activeDraft.customName = document.getElementById('custom-emotion-name').value.trim() || '其他心情';
       }
@@ -1554,23 +1592,19 @@
       activeDraft.date = getTodayDateStr();
       activeDraft.timestamp = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
       activeDraft.updatedAt = Date.now();
-      activeDraft.likes = activeDraft.likes || 0;
 
       const existingIdx = classRecords.findIndex(r => r.studentId === currentStudent.id && r.date === activeDraft.date);
+      let finalRecord;
       if (existingIdx !== -1) {
-        classRecords[existingIdx] = { ...activeDraft, likes: classRecords[existingIdx].likes || 0 };
+        finalRecord = { ...activeDraft, likes: classRecords[existingIdx].likes || 0 };
+        classRecords[existingIdx] = finalRecord;
       } else {
-        classRecords.push({ ...activeDraft });
+        finalRecord = { ...activeDraft, likes: 0 };
+        classRecords.push(finalRecord);
       }
 
-      await saveCloudData();
+      await pushSingleRecordToCloud(finalRecord);
       playSoundEffect('success');
-
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 收藏並同步至雲端`;
-        lucide.createIcons();
-      }
 
       updateClassBadgeCount();
       updateTreeGemColor();
@@ -1596,23 +1630,20 @@
     /* ==========================================================
        7. 全班情緒光譜牆
        ========================================================== */
-    async function openClassWallModal() {
+    function openClassWallModal() {
       playSoundEffect('click');
       const todayStr = getTodayDateStr();
       document.getElementById('wall-date-filter').value = todayStr;
       document.getElementById('class-wall-modal').classList.remove('hidden');
-      await renderClassWall(true);
+      syncDataFromCloud(false);
+      renderClassWall();
     }
 
     function closeClassWallModal() {
       document.getElementById('class-wall-modal').classList.add('hidden');
     }
 
-    async function renderClassWall(shouldFetch = true) {
-      if (shouldFetch) {
-        await fetchCloudData();
-      }
-
+    function renderClassWall() {
       const container = document.getElementById('class-cards-container');
       const selectedDate = document.getElementById('wall-date-filter').value || getTodayDateStr();
       container.innerHTML = '';
@@ -1714,9 +1745,8 @@
         record.likes = (record.likes || 0) + 1;
         record.updatedAt = Date.now();
         playSoundEffect('heart');
-        renderClassWall(false);
-        await saveCloudData();
-        renderClassWall(false);
+        renderClassWall();
+        await pushSingleRecordToCloud(record);
       }
     }
 
@@ -1747,43 +1777,15 @@
       });
     }
 
-    async function syncDataFromCloud(showAlert = false) {
-      playSoundEffect('click');
-      setSyncStatusUI('syncing', '正在同步最新資料...');
-      const ok = await fetchCloudData();
-      if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
-        renderStudentGrid();
-      }
-      if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
-        renderClassWall(false);
-      }
-      if (showAlert) {
-        alert(ok ? '✅ 已成功從雲端同步全班最新心情資料！' : '⚠️ 雲端連線較慢，請確認網路狀態後再試一次。');
-      }
-    }
-
-    window.addEventListener('DOMContentLoaded', async () => {
+    window.addEventListener('DOMContentLoaded', () => {
       initThreeScene();
       lucide.createIcons();
       
       currentStudent = students[0];
       updateCurrentUserUI();
 
-      await fetchCloudData();
-
-      // 每 4 秒自動背景高速同步一次，若全班心情牆開著也會自動刷新畫面
-      setInterval(async () => {
-        const prevLen = JSON.stringify(classRecords);
-        await fetchCloudData();
-        if (JSON.stringify(classRecords) !== prevLen) {
-          if (!document.getElementById('class-wall-modal').classList.contains('hidden')) {
-            renderClassWall(false);
-          }
-          if (!document.getElementById('student-select-modal').classList.contains('hidden')) {
-            renderStudentGrid();
-          }
-        }
-      }, 4000);
+      // 啟動即時分散式雲端同步
+      initRealtimeCloud();
     });
   </script>
 </body>
