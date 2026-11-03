@@ -113,9 +113,7 @@
         <span>全班心情牆</span>
         <span id="class-record-count-badge" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">0</span>
       </button>
-
-      <button id="music-btn" type="button" onclick="toggleAmbientMusic()" aria-pressed="false" class="bg-white/90 text-indigo-700 rounded-2xl shadow-lg px-3 py-2 text-xs font-bold border border-white/50">♫ 播放音樂</button>
-      <button id="sound-btn" title="切換操作音效" aria-label="關閉操作音效" aria-pressed="true" onclick="toggleSound()" class="w-10 h-10 bg-white/90 text-slate-700 rounded-2xl shadow-lg flex items-center justify-center border border-white/50 hover:bg-slate-100 transition">
+      <button id="sound-btn" title="切換背景音樂與音效" aria-label="關閉背景音樂與音效" aria-pressed="true" onclick="toggleSound()" class="w-10 h-10 bg-white/90 text-slate-700 rounded-2xl shadow-lg flex items-center justify-center border border-white/50 hover:bg-slate-100 transition">
         <i data-lucide="volume-2" class="w-4 h-4"></i>
       </button>
     </div>
@@ -751,47 +749,50 @@
       return new Blob([buffer],{type:'audio/wav'});
     }
     function updateMusicButton() {
-      const playing = ambientPlayer && !ambientPlayer.paused;
-      const button = document.getElementById('music-btn');
-      button.textContent = playing ? '♫ 暫停音樂' : '♫ 播放音樂';
-      button.setAttribute('aria-pressed',String(!!playing));
+      const button=document.getElementById('sound-btn');
+      if(!button) return;
+      button.setAttribute('aria-pressed',String(isSoundOn));
+      button.setAttribute('aria-label',isSoundOn?'關閉背景音樂與音效':'開啟背景音樂與音效');
+      button.title=isSoundOn?'關閉背景音樂與音效':'開啟背景音樂與音效';
+      button.innerHTML=isSoundOn?'<i data-lucide="volume-2" class="w-4 h-4"></i>':'<i data-lucide="volume-x" class="w-4 h-4 text-rose-500"></i>';
+      lucide.createIcons();
     }
     function stopAmbientMusic() {
       if(ambientPlayer) ambientPlayer.pause();
-      updateMusicButton();
     }
-    async function toggleAmbientMusic() {
-      if(musicStarting) return;
-      if(ambientPlayer && !ambientPlayer.paused) {stopAmbientMusic();return;}
-      musicStarting = true;
+    async function startAmbientMusic() {
+      if(!isSoundOn || musicStarting || (ambientPlayer && !ambientPlayer.paused)) return;
+      musicStarting=true;
       try {
         if(!ambientPlayer) {
-          ambientPlayer = document.createElement('audio');
-          ambientPlayer.id = 'ambient-player'; ambientPlayer.loop = true; ambientPlayer.preload = 'auto';
-          ambientPlayer.volume = 0.65;
-          ambientPlayer.src = URL.createObjectURL(makeAmbientWave());
+          ambientPlayer=document.createElement('audio');
+          ambientPlayer.id='ambient-player'; ambientPlayer.loop=true; ambientPlayer.preload='auto';
+          ambientPlayer.volume=0.65;
+          ambientPlayer.src=URL.createObjectURL(makeAmbientWave());
           document.body.appendChild(ambientPlayer);
-          ambientPlayer.addEventListener('play',updateMusicButton);
-          ambientPlayer.addEventListener('pause',updateMusicButton);
-          ambientPlayer.addEventListener('error',()=>{stopAmbientMusic();});
         }
         await ambientPlayer.play();
-        updateMusicButton();
+        if(!isSoundOn) ambientPlayer.pause();
       } catch {
-        stopAmbientMusic();
-        alert('播放未成功。請使用 Safari 或 Chrome 開啟網頁後，再按播放。');
-      } finally {musicStarting = false;}
+        // Respect browser autoplay rules; retry only on the next user interaction.
+      } finally {musicStarting=false;}
     }
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAmbientMusic();});
+    function unlockAmbientMusic(event) {
+      if(event.target.closest?.('#sound-btn')) return;
+      if(event.type==='keydown' && !['Enter',' '].includes(event.key)) return;
+      startAmbientMusic();
+    }
+    window.addEventListener('DOMContentLoaded',()=>startAmbientMusic());
+    document.addEventListener('pointerdown',unlockAmbientMusic,{passive:true});
+    document.addEventListener('click',unlockAmbientMusic,{passive:true});
+    document.addEventListener('keydown',unlockAmbientMusic);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)startAmbientMusic();});
     window.addEventListener('pagehide',stopAmbientMusic);
-
+    window.addEventListener('pageshow',()=>startAmbientMusic());
     function toggleSound() {
-      isSoundOn = !isSoundOn;
-      document.getElementById('sound-btn').setAttribute('aria-pressed', String(isSoundOn));
-      document.getElementById('sound-btn').setAttribute('aria-label', isSoundOn ? '關閉操作音效' : '開啟操作音效');
-      const btn = document.getElementById('sound-btn');
-      btn.innerHTML = isSoundOn ? `<i data-lucide="volume-2" class="w-4 h-4"></i>` : `<i data-lucide="volume-x" class="w-4 h-4 text-rose-500"></i>`;
-      lucide.createIcons();
+      isSoundOn=!isSoundOn;
+      if(isSoundOn) startAmbientMusic(); else stopAmbientMusic();
+      updateMusicButton();
     }
 
     /* ==========================================================
