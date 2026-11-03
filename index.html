@@ -78,6 +78,20 @@
       #app-footer { bottom: calc(8px + env(safe-area-inset-bottom)); }
       #emotion-flow-modal .overflow-y-auto { padding-top: 8px; padding-bottom: 8px; }
     }
+
+    #daily-quote { position:absolute; z-index:25; left:50%; bottom:calc(88px + env(safe-area-inset-bottom)); transform:translateX(-50%); width:calc(100% - 32px); max-width:380px; border:1px solid rgba(255,255,255,.9); border-radius:20px; background:rgba(255,255,255,.92); backdrop-filter:blur(12px); box-shadow:0 6px 24px rgba(103,120,150,.12); overflow:hidden; }
+    #daily-quote-toggle { display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:9px 16px; color:#a56316; font-weight:700; font-size:12px; text-align:left; }
+    #daily-quote-date { font-size:10px; font-weight:500; color:#9a856b; }
+    #daily-quote-chevron { margin-left:auto; font-size:16px; }
+    #daily-quote-text { margin:0; padding:0 18px 14px; color:#46556c; font-weight:500; font-size:14px; line-height:1.75; text-align:center; text-wrap:pretty; }
+    #daily-quote-text[hidden] { display:none; }
+    .quote-reveal { animation:quote-arrive .8s ease-out both; }
+    .quote-sparkle { display:inline-block; animation:quote-glow 4s ease-in-out infinite; }
+    @keyframes quote-arrive { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes quote-glow { 0%,100% { opacity:.65; transform:scale(.95); } 50% { opacity:1; transform:scale(1.1); } }
+    @media(max-width:640px) { #daily-quote { max-width:350px; } #daily-quote-text { font-size:13px; padding-bottom:12px; } }
+    @media(max-height:500px) { #daily-quote { bottom:calc(80px + env(safe-area-inset-bottom)); } #daily-quote-text { font-size:12px; line-height:1.55; padding-bottom:10px; } }
+    @media(prefers-reduced-motion:reduce) { .quote-reveal,.quote-sparkle { animation:none; } }
   </style>
 </head>
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
@@ -118,6 +132,13 @@
       </button>
     </div>
   </header>
+
+  <aside id="daily-quote" aria-label="情緒島的每日一句">
+    <button id="daily-quote-toggle" type="button" onclick="toggleIslandQuote()" aria-expanded="true" aria-controls="daily-quote-text">
+      <span class="quote-sparkle" aria-hidden="true">☀️</span><span>情緒島的每日一句</span><span id="daily-quote-date"></span><span id="daily-quote-chevron" aria-hidden="true">−</span>
+    </button>
+    <p id="daily-quote-text" aria-live="polite"></p>
+  </aside>
 
   <!-- 底部中央主操作引導懸浮按鈕 -->
   <div id="app-footer" class="absolute bottom-6 left-0 right-0 z-30 flex justify-center pointer-events-none px-4">
@@ -340,6 +361,70 @@
     syncVisibleViewport();
     window.addEventListener('resize', syncVisibleViewport);
     window.visualViewport?.addEventListener('resize', syncVisibleViewport);
+
+    const DAILY_ISLAND_QUOTES = [
+      '有些答案不會立刻出現，但你可以先把今天過好。',
+      '今天沒有很開心，也沒關係，你的感受值得被聽見。',
+      '慢一點也可以，你正在走自己的路。',
+      '先照顧好自己，再一步一步往前走。',
+      '願意試一次，就已經是一個小小的開始。',
+      '累了可以休息，休息也是照顧自己的方式。',
+      '你不必一次做好所有事，先完成眼前的一小步。',
+      '遇到不會的事情，可以問，也可以慢慢學。',
+      '今天的小進步，也值得為自己拍拍手。',
+      '不想說話的時候，也可以先安靜陪著自己。',
+      '別人的步伐，不需要成為你的倒數計時。',
+      '你可以很勇敢，也可以說自己需要幫忙。',
+      '心情像天氣會變化，不必急著趕走每一朵雲。',
+      '把肩膀放鬆，給自己一個好好呼吸的空間。',
+      '一件事做得不順利，不代表你整個人都不好。',
+      '今天試著對自己說一句溫柔的話吧。',
+      '你可以重新開始，不需要等到完美的時候。',
+      '有些努力暫時看不見，但你付出的心力仍然算數。',
+      '可以失望，也可以等準備好了再試一次。',
+      '你的想法值得被聽見，慢慢說也沒關係。',
+      '不必和昨天一樣，每天都可以有不同的心情。',
+      '給別人一點鼓勵，也記得留一份給自己。',
+      '今天若有一件小事讓你舒服，就把它記在心裡。',
+      '不知道下一步時，可以先找一個願意聽你說話的人。',
+      '你不需要用成績或表現，換取被好好對待。',
+      '有些事需要時間，你可以邊走邊想。',
+      '說出「我不太好」，也可以是一種勇敢。',
+      '留一點時間給喜歡的事情，讓心休息一下。',
+      '不用急著變成誰，先認識現在的自己。',
+      '今天辛苦了，願你找到一個讓自己安心的小角落。'
+    ];
+    let lastQuoteDate = '';
+    function islandQuoteForDate(now = new Date()) {
+      const parts = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+      const value = type => parts.find(part => part.type === type).value;
+      const year=value('year'), month=value('month'), day=value('day');
+      const elapsed=Math.floor((Date.UTC(Number(year),Number(month)-1,Number(day))-Date.UTC(2026,10,3))/86400000);
+      const index=((elapsed % DAILY_ISLAND_QUOTES.length)+DAILY_ISLAND_QUOTES.length)%DAILY_ISLAND_QUOTES.length;
+      return {date:year+'-'+month+'-'+day,label:month+'/'+day,text:DAILY_ISLAND_QUOTES[index]};
+    }
+    function refreshIslandQuote() {
+      const quote=islandQuoteForDate();
+      if(quote.date===lastQuoteDate) return;
+      lastQuoteDate=quote.date;
+      const text=document.getElementById('daily-quote-text');
+      document.getElementById('daily-quote-date').textContent=quote.label;
+      text.textContent=quote.text;
+      text.classList.remove('quote-reveal');
+      requestAnimationFrame(()=>text.classList.add('quote-reveal'));
+    }
+    function toggleIslandQuote() {
+      const button=document.getElementById('daily-quote-toggle'), text=document.getElementById('daily-quote-text');
+      const expanded=button.getAttribute('aria-expanded')==='true';
+      button.setAttribute('aria-expanded',String(!expanded));
+      text.hidden=expanded;
+      document.getElementById('daily-quote-chevron').textContent=expanded?'＋':'−';
+    }
+    window.addEventListener('DOMContentLoaded',()=>{
+      refreshIslandQuote();
+      setInterval(refreshIslandQuote,60000);
+    });
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshIslandQuote();});
 
     function escapeHTML(value) { return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;", "'":"&#39;"}[c])); }
     const PRESET_STUDENTS = [
