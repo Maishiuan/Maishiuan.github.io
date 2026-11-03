@@ -2093,7 +2093,7 @@
       const font=(ctx,size,bold=false)=>{ctx.font=(bold?'700 ':'500 ')+size+'px "Zen Maru Gothic", sans-serif';};
       const counts=EMOTION_DEFINITIONS.map(def=>({def,count:records.filter(r=>r.emotionId===def.id).length})).filter(item=>item.count);
       const chartHeight=Math.max(64,counts.length*45);
-      const headerHeight=310+chartHeight;
+      const headerHeight=340+chartHeight;
       const cards=records.map(record=>{
         const def=EMOTION_DEFINITIONS.find(d=>d.id===record.emotionId);
         const name=record.emotionId==='custom_other'?(record.customName||'其他心情'):(def?.name||'未分類');
@@ -2147,7 +2147,7 @@
           font(ctx,19);ctx.fillStyle='#94a3b8';ctx.fillText('記錄時間 '+(card.record.timestamp||'—')+'　·　打氣 '+(Number(card.record.likes)||0)+' 次',68,y+card.height-22);
           y+=card.height+20;
         }
-        font(ctx,18);ctx.fillStyle='#718096';ctx.fillText((teacher?'含私人紀錄，請妥善保管':'只包含目前可查看的公開紀錄')+'　｜　第 '+(index+1)+' / '+pages.length+' 張',46,canvas.height-22);
+        font(ctx,18);ctx.fillStyle='#718096';ctx.fillText((privateCount>0?'含私人紀錄，請妥善保管':'僅包含此次匯出可查看的公開紀錄')+'　｜　第 '+(index+1)+' / '+pages.length+' 張',46,canvas.height-22);
         const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
         if(!blob)throw new Error('無法產生圖檔，請稍後重試');
         output.push({blob,name:'班級情緒島_'+date+(pages.length>1?'_'+(index+1):'')+'.png'});
