@@ -92,6 +92,41 @@
     @media(max-width:640px) { #daily-quote { max-width:350px; } #daily-quote-text { font-size:13px; padding-bottom:12px; } }
     @media(max-height:500px) { #daily-quote { bottom:calc(80px + env(safe-area-inset-bottom)); } #daily-quote-text { font-size:12px; line-height:1.55; padding-bottom:10px; } }
     @media(prefers-reduced-motion:reduce) { .quote-reveal,.quote-sparkle { animation:none; } }
+
+    #bottom-hud { display:contents; }
+    #account-controls { pointer-events:auto; }
+    /* Reserve real layout rows for controls; the island fits only the remaining space. */
+    @media (max-width:640px), (max-height:500px) {
+      body { display:grid; grid-template-rows:auto minmax(0,1fr) auto; grid-template-columns:minmax(0,1fr); }
+      #app-header { grid-row:1; grid-column:1; position:relative; inset:auto; display:grid; grid-template-columns:minmax(0,1fr); gap:6px; width:100%; padding: max(8px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 4px max(10px,env(safe-area-inset-left)); }
+      #app-header > div:first-child { width:100%; min-width:0; gap:6px; justify-content:space-between; }
+      #app-header > div:first-child > div:first-child { flex:1; min-width:0; padding:7px 9px; }
+      #app-header > div:nth-child(2) { justify-self:end; margin:0; }
+      #app-header #account-controls { position:static; inset:auto; width:auto; max-width:100%; justify-self:end; margin:0; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+      #app-header #account-controls button,#app-header #account-controls span { padding:6px 9px; font-size:11px; }
+      #current-user-badge { max-width:45%; padding:8px; gap:4px; }
+      #current-user-name { overflow-wrap:anywhere; }
+      #sync-status-text { font-size:10px; line-height:1.35; }
+      #app-header h1 { font-size:14px; }
+      #canvas-container { grid-row:2; grid-column:1; position:relative; inset:auto; width:100%; height:100%; min-height:0; overflow:hidden; }
+      #bottom-hud { grid-row:3; grid-column:1; display:flex; flex-direction:column; gap:8px; align-items:center; min-width:0; padding:4px max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left)); z-index:25; }
+      #bottom-hud #daily-quote { position:relative; inset:auto; transform:none; width:100%; max-width:380px; flex-shrink:0; }
+      #bottom-hud #app-footer { position:relative; inset:auto; padding:0; width:100%; flex-shrink:0; }
+      #app-footer button:first-child { font-size:12px; padding:10px 14px; gap:5px; }
+      #app-footer button:last-child { width:40px; height:40px; }
+      #daily-quote-toggle { min-height:36px; padding:6px 12px; }
+      #daily-quote-text { font-size:13px; line-height:1.55; padding:0 14px 10px; }
+      body > .absolute.bottom-6.left-6 { display:none; }
+    }
+    @media (min-width:641px) and (max-height:500px) {
+      #app-header { grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+      #app-header > div:first-child { grid-column:1; grid-row:1 / 3; }
+      #app-header > div:nth-child(2) { grid-column:2; grid-row:1; }
+      #app-header #account-controls { grid-column:2; grid-row:2; }
+      #bottom-hud { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; }
+      #bottom-hud #daily-quote { max-width:none; }
+      #bottom-hud #app-footer { width:auto; }
+    }
   </style>
 </head>
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
@@ -133,6 +168,7 @@
     </div>
   </header>
 
+  <div id="bottom-hud">
   <aside id="daily-quote" aria-label="情緒島的每日一句">
     <button id="daily-quote-toggle" type="button" onclick="toggleIslandQuote()" aria-expanded="true" aria-controls="daily-quote-text">
       <span class="quote-sparkle" aria-hidden="true">☀️</span><span>情緒島的每日一句</span><span id="daily-quote-date"></span><span id="daily-quote-chevron" aria-hidden="true">−</span>
@@ -152,6 +188,8 @@
         <i data-lucide="compass" class="w-5 h-5"></i>
       </button>
     </div>
+  </div>
+
   </div>
 
   <!-- 3D 視角操作引導 -->
@@ -699,7 +737,7 @@
         button.textContent='老師登出';button.onclick=async()=>{await cloudClient.auth.signOut();location.reload();};
         const label=document.createElement('span');label.className='bg-indigo-50 text-indigo-700 rounded-xl px-3 py-2 text-xs';label.textContent='老師後台已登入';actions.appendChild(label);
       }else{button.textContent='老師後台';button.onclick=showCloudLogin;}
-      actions.appendChild(button);document.body.appendChild(actions);
+      actions.appendChild(button);document.getElementById('app-header').appendChild(actions);
     }
 
     async function pushSingleRecordToCloud(record) {
@@ -1552,8 +1590,10 @@
       const width = container.clientWidth, height = container.clientHeight;
       if (!width || !height) return;
       camera.aspect = width / height;
-      // A wider view on portrait phones keeps more of the island in frame.
-      camera.fov = width <= 640 && height > width ? 55 : 40;
+      const compact=window.matchMedia('(max-width:640px), (max-height:500px)').matches;
+      camera.fov=40;
+      // Fit the entire island inside its own area, keeping both axes comfortably in frame.
+      camera.zoom=compact?Math.min(0.8,camera.aspect*0.68):1;
       camera.updateProjectionMatrix();
       camera.lookAt(0, 3.2, 0);
       renderer.setSize(width, height);
