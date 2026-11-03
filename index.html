@@ -1102,6 +1102,58 @@
       return dog;
     }
 
+    let rainbowCat = null;
+    function createRainbowCat() {
+      const textures = [];
+      for (let frame = 0; frame < 4; frame++) {
+        const canvas=document.createElement('canvas');canvas.width=104;canvas.height=52;
+        const ctx=canvas.getContext('2d');
+        const rect=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
+        const colors=['#ff4040','#ff9f1c','#ffe23b','#5be030','#39c9ff','#9554ed'];
+        colors.forEach((color,row)=>{
+          for(let x=0;x<49;x+=4)rect(x,13+row*4+Math.round(Math.sin(x*0.18-frame*Math.PI/2)*2),5,4,color);
+        });
+        // Toast-shaped pink body, gray ears and face, animated paws and tail.
+        rect(42,7,32,34,'#242333');rect(45,4,26,40,'#242333');
+        rect(45,7,26,34,'#f6cf8d');rect(48,10,20,28,'#ff9ee3');
+        [[50,14],[60,12],[55,22],[64,29],[49,31],[59,35]].forEach(([x,y])=>rect(x,y,2,2,'#f34fa3'));
+        const bob=frame%2;
+        rect(34,25+bob,12,5,'#242333');rect(32,21+bob,6,6,'#242333');rect(35,24+bob,9,3,'#a4a4aa');
+        rect(48,40+bob,6,7,'#242333');rect(60,40-bob,6,7,'#242333');
+        rect(50,41+bob,3,3,'#a4a4aa');rect(62,41-bob,3,3,'#a4a4aa');
+        rect(67,20,31,23,'#242333');rect(70,14,8,11,'#242333');rect(87,14,8,11,'#242333');
+        rect(70,23,25,17,'#a4a4aa');rect(73,17,3,10,'#a4a4aa');rect(89,17,3,10,'#a4a4aa');
+        rect(73,29,5,5,'#242333');rect(87,29,5,5,'#242333');rect(73,29,2,2,'#ffffff');rect(87,29,2,2,'#ffffff');
+        rect(71,35,4,3,'#ffb4bd');rect(91,35,4,3,'#ffb4bd');
+        rect(81,33,2,2,'#242333');rect(78,37,11,2,'#242333');rect(78,35,2,3,'#242333');rect(87,35,2,3,'#242333');
+        rect(76,41-bob,5,5,'#242333');rect(89,41+bob,5,5,'#242333');
+        const pair=[];
+        for(let direction=0;direction<2;direction++){
+          const source=document.createElement('canvas');source.width=104;source.height=52;
+          const draw=source.getContext('2d');
+          if(direction){draw.translate(104,0);draw.scale(-1,1);}
+          draw.drawImage(canvas,0,0);
+          const texture=new THREE.CanvasTexture(source);
+          texture.magFilter=THREE.NearestFilter;texture.minFilter=THREE.NearestFilter;
+          pair.push(texture);
+        }
+        textures.push(pair);
+      }
+      const material=new THREE.SpriteMaterial({map:textures[0][0],transparent:true,depthWrite:false});
+      const sprite=new THREE.Sprite(material);sprite.scale.set(9,4.5,1);
+      sprite.userData={textures,here:new THREE.Vector3(),next:new THREE.Vector3()};
+      scene.add(sprite);return sprite;
+    }
+    function animateRainbowCat(seconds) {
+      if(!rainbowCat) return;
+      const angle=seconds*0.3, data=rainbowCat.userData;
+      rainbowCat.position.set(Math.cos(angle)*16,6.5+Math.sin(angle*2)*1.4,Math.sin(angle)*12);
+      data.here.copy(rainbowCat.position).project(camera);
+      data.next.set(Math.cos(angle+0.02)*16,6.5+Math.sin((angle+0.02)*2)*1.4,Math.sin(angle+0.02)*12).project(camera);
+      const facingLeft=data.next.x<data.here.x?1:0;
+      rainbowCat.material.map=data.textures[Math.floor(seconds*7)%4][facingLeft];
+    }
+
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
       const width = container.clientWidth;
@@ -1366,6 +1418,7 @@
         cloudsGroup.push(cloud);
       });
 
+      rainbowCat = createRainbowCat();
       setupInteractionEvents(container);
       animateScene();
       new ResizeObserver(onWindowResize).observe(container);
@@ -1477,6 +1530,7 @@
         cloud.position.x = cloud.userData.baseX + Math.cos(t * 0.4 + cloud.userData.phase) * 0.6;
       });
 
+      animateRainbowCat(performance.now() / 1000);
       renderer.render(scene, camera);
     }
 
