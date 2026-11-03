@@ -114,7 +114,8 @@
         <span id="class-record-count-badge" class="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold ml-1">0</span>
       </button>
 
-      <button id="sound-btn" onclick="toggleSound()" class="w-10 h-10 bg-white/90 text-slate-700 rounded-2xl shadow-lg flex items-center justify-center border border-white/50 hover:bg-slate-100 transition">
+      <button id="music-btn" type="button" onclick="toggleAmbientMusic()" aria-pressed="false" class="bg-white/90 text-indigo-700 rounded-2xl shadow-lg px-3 py-2 text-xs font-bold border border-white/50">♫ 播放音樂</button>
+      <button id="sound-btn" title="切換操作音效" aria-label="關閉操作音效" aria-pressed="true" onclick="toggleSound()" class="w-10 h-10 bg-white/90 text-slate-700 rounded-2xl shadow-lg flex items-center justify-center border border-white/50 hover:bg-slate-100 transition">
         <i data-lucide="volume-2" class="w-4 h-4"></i>
       </button>
     </div>
@@ -708,8 +709,92 @@
       }
     }
 
+    // Original procedural ambience: synthesized tones only, no recordings or song samples.
+    let musicEnabled = false, musicStarting = false, musicTimer = null, musicBus = null;
+    let nextMusicTime = 0, musicBar = 0;
+    const musicVoices = new Set();
+    const ambientChords = [
+      [130.8128, 195.9977, 246.9417, 293.6648],
+      [110, 164.8138, 246.9417, 261.6256],
+      [87.3071, 174.6141, 220, 261.6256],
+      [97.9989, 146.8324, 220, 293.6648]
+    ];
+
+    function updateMusicButton() {
+      const button = document.getElementById('music-btn');
+      button.textContent = musicEnabled ? '♫ 暫停音樂' : '♫ 播放音樂';
+      button.setAttribute('aria-pressed', String(musicEnabled));
+    }
+
+    function ambientTone(frequency, start, duration, volume, type = 'sine') {
+      const oscillator = audioCtx.createOscillator(), envelope = audioCtx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, start);
+      envelope.gain.setValueAtTime(0, start);
+      envelope.gain.linearRampToValueAtTime(volume, start + Math.min(1.8, duration / 3));
+      envelope.gain.linearRampToValueAtTime(volume * 0.7, start + duration * 0.6);
+      envelope.gain.linearRampToValueAtTime(0, start + duration);
+      oscillator.connect(envelope); envelope.connect(musicBus);
+      musicVoices.add(oscillator);
+      oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); musicVoices.delete(oscillator); };
+      oscillator.start(start); oscillator.stop(start + duration + 0.05);
+    }
+
+    function scheduleAmbientMusic() {
+      if (!musicEnabled || audioCtx.state !== 'running') return;
+      // Schedule only a short window; each chord overlaps gently with the next.
+      while (nextMusicTime < audioCtx.currentTime + 10) {
+        const chord = ambientChords[musicBar % ambientChords.length];
+        chord.forEach((frequency, index) => ambientTone(frequency, nextMusicTime + index * 0.08, 9.5, index === 0 ? 0.035 : 0.022));
+        ambientTone(chord[2] * 2, nextMusicTime + 2.5, 3.8, 0.018);
+        ambientTone(chord[3] * 2, nextMusicTime + 5, 3.5, 0.012);
+        musicBar++; nextMusicTime += 8;
+      }
+    }
+
+    function stopAmbientMusic() {
+      musicEnabled = false;
+      if (musicTimer !== null) clearInterval(musicTimer);
+      musicTimer = null;
+      if (musicBus && audioCtx) {
+        const bus = musicBus, now = audioCtx.currentTime;
+        bus.gain.cancelScheduledValues(now);
+        bus.gain.setValueAtTime(bus.gain.value, now);
+        bus.gain.linearRampToValueAtTime(0, now + 0.2);
+        for (const oscillator of musicVoices) { try { oscillator.stop(now + 0.22); } catch {} }
+        setTimeout(() => bus.disconnect(), 300);
+        musicBus = null;
+      }
+      updateMusicButton();
+    }
+
+    async function toggleAmbientMusic() {
+      if (musicStarting) return;
+      if (musicEnabled) { stopAmbientMusic(); return; }
+      musicStarting = true;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        await audioCtx.resume();
+        if (audioCtx.state !== 'running' || document.hidden) throw new Error('Audio unavailable');
+        musicBus = audioCtx.createGain(); musicBus.gain.value = 0.3;
+        musicBus.connect(audioCtx.destination);
+        musicEnabled = true; musicBar = 0; nextMusicTime = audioCtx.currentTime + 0.1;
+        scheduleAmbientMusic();
+        musicTimer = setInterval(scheduleAmbientMusic, 1000);
+        updateMusicButton();
+      } catch {
+        stopAmbientMusic();
+        alert('目前無法播放音樂，請再按一次播放，或確認手機的音量設定。');
+      } finally { musicStarting = false; }
+    }
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden && musicEnabled) stopAmbientMusic(); });
+    window.addEventListener('pagehide', stopAmbientMusic);
+
     function toggleSound() {
       isSoundOn = !isSoundOn;
+      document.getElementById('sound-btn').setAttribute('aria-pressed', String(isSoundOn));
+      document.getElementById('sound-btn').setAttribute('aria-label', isSoundOn ? '關閉操作音效' : '開啟操作音效');
       const btn = document.getElementById('sound-btn');
       btn.innerHTML = isSoundOn ? `<i data-lucide="volume-2" class="w-4 h-4"></i>` : `<i data-lucide="volume-x" class="w-4 h-4 text-rose-500"></i>`;
       lucide.createIcons();
