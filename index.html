@@ -127,6 +127,13 @@
       #bottom-hud #daily-quote { max-width:none; }
       #bottom-hud #app-footer { width:auto; }
     }
+
+    #kid-greeting { position:absolute; z-index:35; pointer-events:none; max-width:min(240px,calc(100vw - 28px)); padding:10px 14px; border:2px solid #fff; border-radius:18px; background:rgba(255,255,255,.97); color:#475569; font-size:13px; font-weight:700; line-height:1.6; text-align:center; box-shadow:0 5px 20px rgba(78,91,127,.2); transform:translate(-50%,-100%); }
+    #kid-greeting[hidden] { display:none; }
+    #kid-greeting::after { content:''; position:absolute; bottom:-8px; left:calc(50% - 7px); border-left:7px solid transparent; border-right:7px solid transparent; border-top:8px solid white; }
+    .greeting-pop { animation:kid-greeting-pop .22s ease-out; }
+    @keyframes kid-greeting-pop { from { opacity:0; margin-top:6px; } to { opacity:1; margin-top:0; } }
+    @media(prefers-reduced-motion:reduce) { .greeting-pop { animation:none; } }
   </style>
 </head>
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
@@ -196,7 +203,7 @@
   <div class="absolute bottom-6 left-6 z-20 pointer-events-none hidden md:block">
     <div class="bg-slate-900/40 backdrop-blur-sm text-white text-[11px] px-3.5 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
       <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
-      <span>拖曳滑鼠 360° 旋轉島嶼，滾輪可縮放視角</span>
+      <span>點小人物打招呼 · 拖曳旋轉島嶼，滾輪縮放</span>
     </div>
   </div>
 
@@ -1277,6 +1284,112 @@
       rainbowCat.material.map=data.textures[Math.floor(seconds*7)%4][facingLeft];
     }
 
+    let islandMonkey = null, activeKidBubble = null, kidBubbleTimer = null;
+    const kidBubblePoint = new THREE.Vector3();
+    const kidGreetings = ['👋 嗨～很高興見到你！','😊 今天也一起慢慢來吧。','🌈 每一種心情都可以來島上。','✨ 送你一點小小的勇氣！','😄 哈囉！要一起散步嗎？','🌻 謝謝你來陪我！','💛 累了就休息一下吧。','🙌 擊掌！你今天辛苦了！','🐵 你有看到島上的小猴子嗎？','🥰 很開心和你一起待在島上。','😎 耶！我們又見面了！','🍀 願你今天遇到一件舒服的小事。'];
+    function createIslandMonkey() {
+      const monkey=new THREE.Group();
+      const brown=new THREE.MeshStandardMaterial({color:0x975326,roughness:0.65});
+      const light=new THREE.MeshStandardMaterial({color:0xffcf9b,roughness:0.6});
+      const dark=new THREE.MeshBasicMaterial({color:0x28190f});
+      const white=new THREE.MeshBasicMaterial({color:0xffffff});
+      const pink=new THREE.MeshStandardMaterial({color:0xf6a27d,roughness:0.65});
+      function ball(parent,r,mat,x,y,z,sx=1,sy=1,sz=1){const mesh=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),mat);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);mesh.castShadow=true;parent.add(mesh);return mesh;}
+      ball(monkey,0.55,brown,0,0.89,0,0.9,1.1,0.85);
+      ball(monkey,0.34,light,0,0.87,0.42,0.8,1,0.23);
+      const head=new THREE.Group();head.position.set(0,1.8,0);monkey.add(head);
+      ball(head,0.72,brown,0,0,0,1,0.95,0.86);
+      for(const side of [-1,1]){
+        ball(head,0.29,brown,side*0.7,0,0,1,1,0.6);
+        ball(head,0.20,light,side*0.72,0,0.16,1,1,0.4);
+        ball(head,0.38,light,side*0.23,-0.04,0.47,1,1.12,0.55);
+      }
+      ball(head,0.48,light,0,-0.29,0.48,1,0.7,0.6);
+      for(const side of [-1,1]){
+        ball(head,0.13,dark,side*0.25,0.02,0.7,1,1.15,0.5);
+        ball(head,0.043,white,side*0.25+0.035,0.075,0.763,1,1,0.6);
+        ball(head,0.08,pink,side*0.39,-0.23,0.7,1.2,0.6,0.2);
+        ball(head,0.025,dark,side*0.055,-0.22,0.77,1,1.2,0.6);
+      }
+      const smile=new THREE.Mesh(new THREE.TorusGeometry(0.115,0.025,8,18,Math.PI),dark);
+      smile.rotation.x=Math.PI;smile.position.set(0,-0.33,0.77);head.add(smile);
+      const arms=[],legs=[];
+      for(const side of [-1,1]){
+        const arm=new THREE.Group();arm.position.set(side*0.46,1.16,0);monkey.add(arm);
+        const limb=createRoundedLimb(0.12,0.54,brown);limb.position.y=-0.24;arm.add(limb);
+        ball(arm,0.16,light,0,-0.53,0.02,1,1,0.85);arms.push(arm);
+        const leg=new THREE.Group();leg.position.set(side*0.25,0.46,0);monkey.add(leg);
+        const shin=createRoundedLimb(0.14,0.35,brown);shin.position.y=-0.12;leg.add(shin);
+        ball(leg,0.19,light,0,-0.28,0.12,1,0.65,1.4);legs.push(leg);
+      }
+      const tail=new THREE.Group();monkey.add(tail);
+      const curve=new THREE.CatmullRomCurve3([[0,0.65,-0.35],[0,0.7,-0.85],[0.45,1.05,-1.1],[0.7,1.4,-1],[0.48,1.58,-0.95],[0.26,1.4,-0.95],[0.4,1.24,-1]].map(v=>new THREE.Vector3(...v)));
+      tail.add(new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.085,8,false),brown));
+      monkey.userData={head,arms,legs,tail};return monkey;
+    }
+    function animateIslandMonkey(seconds) {
+      if(!islandMonkey)return;
+      const angle=seconds*0.19, stride=seconds*5.5, data=islandMonkey.userData;
+      islandMonkey.position.set(Math.cos(angle)*7.6,0.13+Math.abs(Math.sin(stride))*0.07,Math.sin(angle)*7.3);
+      islandMonkey.rotation.y=Math.atan2(-Math.sin(angle)*7.6,Math.cos(angle)*7.3);
+      data.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(stride+i*Math.PI)*0.44);
+      data.arms.forEach((arm,i)=>{arm.rotation.x=-Math.sin(stride+i*Math.PI)*0.3;arm.rotation.z=(i?1:-1)*0.12;});
+      data.tail.rotation.y=Math.sin(seconds*2.5)*0.16;
+      data.head.rotation.z=Math.sin(seconds*1.8)*0.045;
+    }
+    function showKidGreeting(kid) {
+      let bubble=document.getElementById('kid-greeting');
+      if(!bubble){bubble=document.createElement('div');bubble.id='kid-greeting';bubble.setAttribute('role','status');bubble.setAttribute('aria-live','polite');document.body.appendChild(bubble);}
+      const last=kid.userData.lastGreeting??-1;
+      const index=last<0?Math.floor(Math.random()*kidGreetings.length):(last+1+Math.floor(Math.random()*(kidGreetings.length-1)))%kidGreetings.length;
+      kid.userData.lastGreeting=index;activeKidBubble=kid;
+      bubble.textContent=kidGreetings[index];bubble.hidden=false;
+      bubble.classList.remove('greeting-pop');requestAnimationFrame(()=>bubble.classList.add('greeting-pop'));
+      clearTimeout(kidBubbleTimer);kidBubbleTimer=setTimeout(()=>{bubble.hidden=true;activeKidBubble=null;},4200);
+      updateKidGreeting();playSoundEffect('click');
+    }
+    function updateKidGreeting() {
+      if(!activeKidBubble)return;
+      const bubble=document.getElementById('kid-greeting'),area=document.getElementById('canvas-container').getBoundingClientRect();
+      activeKidBubble.localToWorld(kidBubblePoint.set(0,2.45,0));kidBubblePoint.project(camera);
+      if(kidBubblePoint.z>1||kidBubblePoint.z< -1){bubble.style.visibility='hidden';return;}
+      bubble.style.visibility='visible';
+      const half=bubble.offsetWidth/2;
+      const x=area.left+(kidBubblePoint.x+1)*area.width/2;
+      const y=area.top+(1-kidBubblePoint.y)*area.height/2-12;
+      bubble.style.left=Math.max(area.left+half+6,Math.min(area.right-half-6,x))+'px';
+      bubble.style.top=Math.max(area.top+bubble.offsetHeight+8,Math.min(area.bottom-8,y))+'px';
+    }
+    function setupKidGreetings(dom) {
+      const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),head=new THREE.Vector3();let down=null;
+      const kidOf=object=>{while(object&&object!==islandGroup){if(kidsGroup.includes(object))return object;object=object.parent;}return null;};
+      dom.addEventListener('pointerdown',event=>{if(event.isPrimary!==false)down={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};});
+      dom.addEventListener('pointermove',event=>{if(down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)>9)down.moved=true;});
+      dom.addEventListener('pointercancel',()=>down=null);
+      dom.addEventListener('pointerup',event=>{
+        const tap=down;down=null;
+        if(!tap||tap.id!==event.pointerId||tap.moved||Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>9)return;
+        const bounds=dom.getBoundingClientRect();if(!bounds.width||!bounds.height)return;
+        scene.updateMatrixWorld(true);
+        mouse.set((event.clientX-bounds.left)/bounds.width*2-1,-(event.clientY-bounds.top)/bounds.height*2+1);
+        ray.setFromCamera(mouse,camera);
+        let hits=ray.intersectObjects(islandGroup.children,true);
+        let selected=hits.length?kidOf(hits[0].object):null;
+        if(!selected){
+          let closest=event.pointerType==='touch'?28:18;
+          for(const kid of kidsGroup){
+            kid.localToWorld(head.set(0,1.65,0));head.project(camera);
+            if(head.z< -1||head.z>1)continue;
+            const distance=Math.hypot(bounds.left+(head.x+1)*bounds.width/2-event.clientX,bounds.top+(1-head.y)*bounds.height/2-event.clientY);
+            if(distance>=closest)continue;
+            mouse.set(head.x,head.y);ray.setFromCamera(mouse,camera);hits=ray.intersectObjects(islandGroup.children,true);
+            if(hits.length&&kidOf(hits[0].object)===kid){selected=kid;closest=distance;}
+          }
+        }
+        if(selected)showKidGreeting(selected);
+      });
+    }
+
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
       const width = container.clientWidth;
@@ -1541,8 +1654,11 @@
         cloudsGroup.push(cloud);
       });
 
+      islandMonkey=createIslandMonkey();
+      islandGroup.add(islandMonkey);
       rainbowCat = createRainbowCat();
       setupInteractionEvents(container);
+      setupKidGreetings(container);
       animateScene();
       new ResizeObserver(onWindowResize).observe(container);
       onWindowResize();
@@ -1655,6 +1771,8 @@
         cloud.position.x = cloud.userData.baseX + Math.cos(t * 0.4 + cloud.userData.phase) * 0.6;
       });
 
+      animateIslandMonkey(performance.now() / 1000);
+      updateKidGreeting();
       animateRainbowCat(performance.now() / 1000);
       renderer.render(scene, camera);
     }
