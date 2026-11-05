@@ -1957,8 +1957,7 @@
       }
       const counts = { positive: 0, sensitive: 0, peace: 0 };
       classRecords.forEach(r => {
-        const def = EMOTION_DEFINITIONS.find(d => d.id === r.emotionId);
-        if (def) counts[def.category] = (counts[def.category] || 0) + 1;
+        recordEmotions(r).forEach(item=>{const def=EMOTION_DEFINITIONS.find(d=>d.id===item.id);if(def)counts[def.category]=(counts[def.category]||0)+1;});
       });
       if (counts.positive >= counts.sensitive) {
         treeGem.material.color.setHex(0xf59e0b);
