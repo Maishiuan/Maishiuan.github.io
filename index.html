@@ -839,12 +839,48 @@
 
     // Original synthesized island music, played through the browser's media player.
     let ambientPlayer = null, musicStarting = false;
-    function makeAmbientWave() {
+    const ISLAND_SONGS = [
+      {name:'陽光散步',bpm:108,key:0,order:[0,3,4,0,5,3,4,0],pattern:0,turn:0,lead:'mallet'},
+      {name:'香蕉小跳步',bpm:116,key:2,order:[0,5,1,4,0,3,4,0],pattern:1,turn:1,lead:'pluck'},
+      {name:'彩虹野餐',bpm:104,key:5,order:[3,0,4,5,3,0,1,4],pattern:2,turn:0,lead:'chime'},
+      {name:'微風遊樂園',bpm:112,key:7,order:[0,1,3,4,5,1,4,0],pattern:3,turn:2,lead:'mallet'},
+      {name:'雲朵捉迷藏',bpm:100,key:0,order:[0,3,2,5,1,3,4,0],pattern:1,turn:3,lead:'flute'},
+      {name:'小島跳格子',bpm:120,key:4,order:[0,4,5,3,0,1,4,0],pattern:2,turn:1,lead:'pluck'},
+      {name:'星光糖果屋',bpm:110,key:2,order:[0,2,3,4,0,5,1,4],pattern:0,turn:2,lead:'chime'},
+      {name:'花園好朋友',bpm:106,key:5,order:[3,4,0,5,1,4,3,0],pattern:3,turn:0,lead:'flute'}
+    ];
+    function dailyIslandMusic(now=new Date()) {
+      const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+      const get=type=>parts.find(part=>part.type===type).value;
+      const day=Math.floor(Date.UTC(Number(get('year')),Number(get('month'))-1,Number(get('day')))/86400000);
+      const block=Math.floor(day/8),offset=((day%8)+8)%8;
+      function shuffle(value){
+        let seed=(Math.imul(value,2654435761)^0x6c8e9cf5)>>>0;
+        const order=[0,1,2,3,4,5,6,7];
+        for(let i=7;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[order[i],order[j]]=[order[j],order[i]];}
+        return order;
+      }
+      const order=shuffle(block);
+      if(order[0]===shuffle(block-1)[7])[order[0],order[1]]=[order[1],order[0]];
+      const index=order[offset];
+      return {date:get('year')+'-'+get('month')+'-'+get('day'),index,song:ISLAND_SONGS[index]};
+    }
+    let ambientMusicDate = '';
+    function refreshDailyIslandMusic() {
+      if(ambientPlayer && ambientMusicDate!==dailyIslandMusic().date){
+        ambientPlayer.pause();URL.revokeObjectURL(ambientPlayer.src);ambientPlayer.remove();ambientPlayer=null;
+        if(isSoundOn)startAmbientMusic();
+      }
+    }
+    window.addEventListener('DOMContentLoaded',()=>setInterval(refreshDailyIslandMusic,60000));
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDailyIslandMusic();});
+
+    function makeAmbientWave(song=dailyIslandMusic().song) {
       // Original upbeat island loop: 108 BPM, soft mallets, plucked chords and light percussion.
-      const rate=22050, beat=60/108, length=Math.round(rate*beat*64);
+      const rate=22050, beat=60/song.bpm, length=Math.round(rate*beat*64);
       const samples=new Float32Array(length);
-      const chords=[[60,64,67,74],[65,69,72,76],[67,71,74,79],[60,64,67,72],
-                    [57,60,64,71],[65,69,72,76],[67,71,74,76],[60,64,67,74]];
+      const palette=[[60,64,67,74],[62,65,69,72],[64,67,71,74],[65,69,72,76],[67,71,74,79],[57,60,64,71]];
+      const chords=song.order.map(index=>palette[index].map(midi=>midi+song.key));
       const frequency=midi=>440*Math.pow(2,(midi-69)/12);
       function note(midi,start,duration,volume,kind='mallet') {
         const f=frequency(midi), offset=Math.round(start*rate), count=Math.round(duration*rate);
@@ -853,6 +889,8 @@
           const decay=Math.exp(-t*(kind==='bass'?5:kind==='pluck'?9:4.5));
           let tone=Math.sin(2*Math.PI*f*t);
           if(kind==='mallet') tone+=0.23*Math.sin(2*Math.PI*f*3*t)*Math.exp(-t*9);
+          if(kind==='chime') tone+=0.3*Math.sin(2*Math.PI*f*2*t)*Math.exp(-t*5)+0.12*Math.sin(2*Math.PI*f*4*t)*Math.exp(-t*10);
+          if(kind==='flute') tone+=0.12*Math.sin(2*Math.PI*f*2*t);
           if(kind==='pluck') tone+=0.35*Math.sin(2*Math.PI*f*2*t)+0.12*Math.sin(2*Math.PI*f*3*t);
           samples[(offset+i)%length]+=tone*attack*fade*decay*volume;
         }
@@ -869,14 +907,14 @@
         }
       }
       const patterns=[[2,1,3,2,0,1],[1,2,3,1,2,0],[2,3,1,2,1,0],[3,2,1,0,1,2]];
-      const positions=[0,0.75,1.5,2.25,3,3.5];
+      const positions=song.pattern%2?[0,0.5,1.25,2,2.75,3.5]:[0,0.75,1.5,2.25,3,3.5];
       for(let bar=0;bar<16;bar++) {
         const chord=chords[bar%8], start=bar*4*beat;
         // Alternating root and fifth keep the pulse buoyant without a heavy drum beat.
         for(let pulse=0;pulse<4;pulse++) note(chord[pulse%2===0?0:2]-24,start+pulse*beat,beat*0.8,0.12,'bass');
         for(const offbeat of [0.5,1.5,2.5,3.5]) chord.slice(0,3).forEach((midi,n)=>note(midi,start+offbeat*beat+n*0.012,beat*0.55,0.035,'pluck'));
-        const pattern=patterns[bar%4];
-        positions.forEach((position,i)=>note(chord[pattern[i]]+12,start+position*beat,beat*0.85,bar%4===3&&i>3?0.075:0.11));
+        const pattern=patterns[(bar+song.pattern)%4];
+        positions.forEach((position,i)=>note(chord[(pattern[i]+song.turn)%4]+12,start+position*beat,beat*0.85,bar%4===3&&i>3?0.075:0.11,song.lead));
         for(let eighth=0;eighth<8;eighth++) shaker(start+eighth*beat/2,eighth%2?0.015:0.008);
       }
       let peak = 0;
@@ -903,6 +941,7 @@
       if(ambientPlayer) ambientPlayer.pause();
     }
     async function startAmbientMusic() {
+      if(ambientPlayer && ambientMusicDate!==dailyIslandMusic().date){ambientPlayer.pause();URL.revokeObjectURL(ambientPlayer.src);ambientPlayer.remove();ambientPlayer=null;}
       if(!isSoundOn || musicStarting || (ambientPlayer && !ambientPlayer.paused)) return;
       musicStarting=true;
       try {
@@ -910,7 +949,9 @@
           ambientPlayer=document.createElement('audio');
           ambientPlayer.id='ambient-player'; ambientPlayer.loop=true; ambientPlayer.preload='auto';
           ambientPlayer.volume=0.65;
-          ambientPlayer.src=URL.createObjectURL(makeAmbientWave());
+          const choice=dailyIslandMusic();ambientMusicDate=choice.date;
+          ambientPlayer.dataset.track=choice.song.name;ambientPlayer.dataset.musicDate=choice.date;
+          ambientPlayer.src=URL.createObjectURL(makeAmbientWave(choice.song));
           document.body.appendChild(ambientPlayer);
         }
         await ambientPlayer.play();
@@ -1329,13 +1370,16 @@
     }
     function animateIslandMonkey(seconds) {
       if(!islandMonkey)return;
-      const angle=seconds*0.19, stride=seconds*5.5, data=islandMonkey.userData;
-      islandMonkey.position.set(Math.cos(angle)*7.6,0.13+Math.abs(Math.sin(stride))*0.07,Math.sin(angle)*7.3);
+      const angle=seconds*0.22, stride=seconds*7.2, data=islandMonkey.userData;
+      const hop=Math.abs(Math.sin(stride)),landing=Math.pow(1-hop,4);
+      islandMonkey.position.set(Math.cos(angle)*7.6,0.1+hop*0.34,Math.sin(angle)*7.3);
       islandMonkey.rotation.y=Math.atan2(-Math.sin(angle)*7.6,Math.cos(angle)*7.3);
-      data.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(stride+i*Math.PI)*0.44);
-      data.arms.forEach((arm,i)=>{arm.rotation.x=-Math.sin(stride+i*Math.PI)*0.3;arm.rotation.z=(i?1:-1)*0.12;});
-      data.tail.rotation.y=Math.sin(seconds*2.5)*0.16;
-      data.head.rotation.z=Math.sin(seconds*1.8)*0.045;
+      islandMonkey.rotation.z=Math.sin(stride*0.5)*0.07;
+      islandMonkey.scale.set(0.7*(1+landing*0.05),0.7*(1-landing*0.1),0.7*(1+landing*0.05));
+      data.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(stride+i*Math.PI)*0.65);
+      data.arms.forEach((arm,i)=>{arm.rotation.x=-Math.sin(stride+i*Math.PI)*0.48;arm.rotation.z=(i?1:-1)*(0.12+hop*0.24);});
+      data.tail.rotation.y=Math.sin(seconds*4)*0.25;data.tail.rotation.x=Math.sin(stride)*0.09;
+      data.head.rotation.z=Math.sin(seconds*2.2)*0.065;data.head.rotation.x=-hop*0.07;
     }
     function showKidGreeting(kid) {
       let bubble=document.getElementById('kid-greeting');
@@ -1655,6 +1699,7 @@
       });
 
       islandMonkey=createIslandMonkey();
+      islandMonkey.scale.setScalar(0.7);
       islandGroup.add(islandMonkey);
       rainbowCat = createRainbowCat();
       setupInteractionEvents(container);
