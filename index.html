@@ -275,37 +275,18 @@
 
         <div id="flow-step-1" class="flex flex-col items-center">
           <div class="text-center mb-4">
-            <h3 class="text-base md:text-lg font-black text-slate-800 title-font">哪一張卡片最貼近現在的你？</h3>
-            <p class="text-xs text-slate-500 mt-1">沒有好壞對錯，每一種情緒都是自然的信號 🌱</p>
+            <h3 class="text-base md:text-lg font-black text-slate-800 title-font">哪些心情最貼近現在的你？（可複選）</h3>
+            <p class="text-xs text-slate-500 mt-1">可以同時有不同心情；點一下選取，再點一次取消 🌱</p>
           </div>
-          <div id="emotion-cards-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2.5 md:gap-3 w-full"></div>
+          <div id="emotion-cards-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2.5 md:gap-3 w-full"></div><button id="emotion-selection-next" onclick="continueEmotionSelection()" class="w-full mt-4 p-3 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-40" disabled>下一步：設定強度</button>
         </div>
 
-        <div id="flow-step-2" class="hidden flex flex-col items-center">
-          <div class="text-center mb-3">
-            <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">情緒深淺探索</span>
-            <h3 class="text-lg font-black text-slate-800 title-font mt-2">這種感覺有多強烈呢？</h3>
-          </div>
-
-          <div id="selected-card-preview" class="w-40 h-50 rounded-2xl bg-white p-3 shadow-xl border-2 border-indigo-200 flex flex-col items-center justify-center gap-2 mb-4 transition-all"></div>
-
-          <div id="custom-emotion-input-wrap" class="w-full max-w-sm mb-4 hidden">
-            <label class="block text-xs font-bold text-slate-600 mb-1">請輸入你的自訂心情名稱：</label>
-            <input type="text" id="custom-emotion-name" placeholder="例如：好奇、害羞、五味雜陳..." class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          </div>
-
-          <div class="w-full max-w-sm flex justify-between gap-1.5 mb-5">
-            <button onclick="selectIntensity(1)" class="intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all text-slate-600 border-slate-200 hover:bg-indigo-50" data-level="1">1<br><span class="text-[10px]">微弱</span></button>
-            <button onclick="selectIntensity(2)" class="intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all text-slate-600 border-slate-200 hover:bg-indigo-50" data-level="2">2<br><span class="text-[10px]">有一點</span></button>
-            <button onclick="selectIntensity(3)" class="intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all bg-indigo-600 text-white border-indigo-600 shadow-md" data-level="3">3<br><span class="text-[10px]">適中</span></button>
-            <button onclick="selectIntensity(4)" class="intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all text-slate-600 border-slate-200 hover:bg-indigo-50" data-level="4">4<br><span class="text-[10px]">強烈</span></button>
-            <button onclick="selectIntensity(5)" class="intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all text-slate-600 border-slate-200 hover:bg-indigo-50" data-level="5">5<br><span class="text-[10px]">極度</span></button>
-          </div>
-
-          <div class="flex gap-3 w-full max-w-sm">
-            <button onclick="goToFlowStep(1)" class="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition">換一張卡片</button>
-            <button onclick="goToFlowStep(3)" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 shadow-lg transition">下一步：尋找原因</button>
-          </div>
+        <div id="flow-step-2" class="hidden flex flex-col items-center w-full">
+          <h3 class="text-lg font-bold mb-2">每一種心情有多強烈呢？</h3>
+          <p class="text-xs text-slate-500 mb-4">可以為每種心情設定不同強度：1 微弱，5 極度</p>
+          <div id="multi-intensity-list" class="space-y-3 w-full mb-4"></div>
+          <div id="custom-emotion-input-wrap" class="w-full mb-4 hidden"><label for="custom-emotion-name" class="text-xs font-bold">自訂心情名稱</label><input id="custom-emotion-name" type="text" maxlength="60" oninput="activeDraft.customName=this.value" class="border rounded-xl p-3 w-full" placeholder="例如：好奇、害羞"></div>
+          <div class="flex gap-3 w-full"><button onclick="goToFlowStep(1)" class="flex-1 border rounded-xl p-3 text-sm">返回選擇心情</button><button onclick="goToFlowStep(3)" class="flex-1 bg-indigo-600 text-white rounded-xl p-3 text-sm">下一步：尋找原因</button></div>
         </div>
 
         <div id="flow-step-3" class="hidden flex flex-col items-center">
@@ -1550,6 +1531,27 @@
       if(skyStars.visible)skyStars.material.size=0.16+Math.sin(seconds*0.9)*0.02;
     }
 
+    const pondFish=[];
+    function addPondFish(pond){
+      const eye=new THREE.MeshBasicMaterial({color:0x17253a});
+      [0xffa52f,0xff704a,0xffd46b,0xeaf7ff].forEach((color,index)=>{
+        const fish=new THREE.Group(),material=new THREE.MeshStandardMaterial({color,roughness:0.45});
+        const body=new THREE.Mesh(new THREE.SphereGeometry(0.25,16,12),material);body.scale.set(1.4,0.26,0.65);fish.add(body);
+        const tail=new THREE.Mesh(new THREE.ConeGeometry(0.18,0.27,3),material);tail.rotation.z=Math.PI/2;tail.rotation.x=Math.PI/2;tail.position.x=-0.4;fish.add(tail);
+        const dot=new THREE.Mesh(new THREE.SphereGeometry(0.035,8,8),eye);dot.position.set(0.22,0.058,0.065);fish.add(dot);
+        const patch=new THREE.Mesh(new THREE.SphereGeometry(0.13,12,8),new THREE.MeshStandardMaterial({color:index%2?0xffffff:0xff7642,roughness:0.5}));patch.scale.set(1,0.22,1);patch.position.set(-0.01,0.055,0);fish.add(patch);
+        fish.userData={tail,index};pond.add(fish);pondFish.push(fish);
+      });
+    }
+    function animatePondFish(seconds){
+      pondFish.forEach(fish=>{
+        const i=fish.userData.index,a=seconds*(0.34+i*0.025)+i*1.7,r=1.35+i*0.25;
+        fish.position.set(Math.cos(a)*r,0.085+Math.sin(seconds*2+i)*0.008,Math.sin(a)*r*0.72);
+        fish.rotation.y=Math.atan2(-Math.cos(a)*r*0.72,-Math.sin(a)*r);
+        fish.userData.tail.rotation.y=Math.sin(seconds*7+i)*0.4;
+      });
+    }
+
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
       const width = container.clientWidth;
@@ -1691,7 +1693,7 @@
       islandGroup.add(gemHalo);
 
       const pondGroup = new THREE.Group();
-      pondGroup.position.set(-5.6, 0.04, 4.4);
+      pondGroup.position.set(-5.6, 0.18, 4.4);
 
       const water = new THREE.Mesh(
         new THREE.CylinderGeometry(3.4, 3.4, 0.12, 48),
@@ -1717,6 +1719,7 @@
       lotus.position.set(-1.1, 0.18, 0.6);
       pondGroup.add(lilyPad1, lotus);
 
+      addPondFish(pondGroup);
       islandGroup.add(pondGroup);
 
       const flowerPositions = [
@@ -1936,6 +1939,7 @@
         cloud.position.x = cloud.userData.baseX + Math.cos(t * 0.4 + cloud.userData.phase) * 0.6;
       });
 
+      animatePondFish(performance.now() / 1000);
       animateIslandGorilla(performance.now() / 1000);
       animateIslandEnvironment(performance.now() / 1000);
       animateIslandMonkey(performance.now() / 1000);
@@ -2093,6 +2097,7 @@
           isPublic: true
         };
       }
+      activeDraft.emotions=exist?recordEmotions(exist):[];
       renderEmotionCardsGrid();
       goToFlowStep(1);
       document.getElementById('emotion-flow-modal').classList.remove('hidden');
@@ -2114,10 +2119,10 @@
 
       if (step === 1) {
         badge.innerText = 'Step 1/3';
-        title.innerText = `今天是哪一張情緒卡最貼近 ${currentStudent.name}？`;
+        title.innerText = `選擇 ${currentStudent.name} 的心情（可複選）`;
       } else if (step === 2) {
         badge.innerText = 'Step 2/3';
-        title.innerText = '感受這種心情有多強烈？';
+        title.innerText = '為每一種心情設定強度';
         renderStep2Preview();
       } else if (step === 3) {
         badge.innerText = 'Step 3/3';
@@ -2130,58 +2135,50 @@
       }
     }
 
+    function recordEmotions(record) {
+      const list=Array.isArray(record.emotions)?record.emotions:[{id:record.emotionId,intensity:record.intensity}];
+      return list.filter(item=>EMOTION_DEFINITIONS.some(def=>def.id===item.id)).map(item=>({id:item.id,intensity:Math.max(1,Math.min(5,Number(item.intensity)||3))}));
+    }
+    function emotionNames(record,levels=false) {
+      return recordEmotions(record).map(item=>{const def=EMOTION_DEFINITIONS.find(d=>d.id===item.id);return(item.id==='custom_other'?(record.customName||'其他心情'):def.name)+(levels?' '+item.intensity+'/5':'');}).join('、');
+    }
+    function continueEmotionSelection(){
+      if(!activeDraft.emotions?.length){alert('請至少選擇一種心情');return;}
+      activeDraft.emotionId=activeDraft.emotions[0].id;activeDraft.intensity=activeDraft.emotions[0].intensity;
+      goToFlowStep(2);
+    }
     function renderEmotionCardsGrid() {
-      const grid = document.getElementById('emotion-cards-grid');
-      grid.innerHTML = '';
-
-      EMOTION_DEFINITIONS.forEach(emotion => {
-        const isSelected = activeDraft.emotionId === emotion.id;
-        const card = document.createElement('div');
-        card.className = `p-2.5 rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-between text-center border-2 ${
-          isSelected ? 'border-indigo-600 bg-indigo-50 shadow-md scale-105 ring-2 ring-indigo-400' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'
-        }`;
-        card.onclick = () => {
-          activeDraft.emotionId = emotion.id;
-          playSoundEffect('card_flip');
-          goToFlowStep(2);
+      const grid=document.getElementById('emotion-cards-grid');grid.innerHTML='';
+      EMOTION_DEFINITIONS.forEach(emotion=>{
+        const selected=activeDraft.emotions.some(item=>item.id===emotion.id);
+        const card=document.createElement('button');card.type='button';card.setAttribute('aria-pressed',String(selected));card.setAttribute('aria-label',emotion.name);
+        card.className='relative p-2.5 rounded-2xl transition-all flex flex-col items-center text-center border-2 '+(selected?'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-300':'border-slate-100 bg-white');
+        card.innerHTML='<span class="absolute right-1 top-1 text-indigo-600 text-xs">'+(selected?'✓':'')+'</span><div class="w-14 h-14 pointer-events-none">'+emotion.svg+'</div><span class="text-xs font-bold">'+emotion.name+'</span><span class="text-[10px] text-slate-400">'+emotion.desc+'</span>';
+        card.onclick=()=>{
+          if(selected)activeDraft.emotions=activeDraft.emotions.filter(item=>item.id!==emotion.id);
+          else activeDraft.emotions.push({id:emotion.id,intensity:3});
+          playSoundEffect('card_flip');renderEmotionCardsGrid();
         };
-
-        card.innerHTML = `
-          <div class="w-14 h-14 md:w-16 md:h-16 mb-1 pointer-events-none">${emotion.svg}</div>
-          <span class="text-xs font-bold text-slate-800 title-font">${emotion.name}</span>
-          <span class="text-[10px] text-slate-400 line-clamp-1 mt-0.5">${emotion.desc}</span>
-        `;
         grid.appendChild(card);
       });
+      const next=document.getElementById('emotion-selection-next');
+      next.disabled=!activeDraft.emotions.length;next.textContent='下一步：設定強度（已選 '+activeDraft.emotions.length+' 種）';
     }
-
     function renderStep2Preview() {
-      const def = EMOTION_DEFINITIONS.find(d => d.id === activeDraft.emotionId);
-      const preview = document.getElementById('selected-card-preview');
-      preview.style.backgroundColor = def.bg;
-      preview.style.borderColor = def.border;
-      preview.innerHTML = `
-        <div class="w-20 h-20 mb-1">${def.svg}</div>
-        <div class="text-base font-black text-slate-800 title-font">${def.name}</div>
-        <p class="text-[11px] text-slate-600 font-medium text-center px-2">${def.desc}</p>
-      `;
-
-      const customWrap = document.getElementById('custom-emotion-input-wrap');
-      if (activeDraft.emotionId === 'custom_other') {
-        customWrap.classList.remove('hidden');
-        document.getElementById('custom-emotion-name').value = activeDraft.customName || '';
-      } else {
-        customWrap.classList.add('hidden');
-      }
-
-      document.querySelectorAll('.intensity-btn').forEach(btn => {
-        const lvl = parseInt(btn.dataset.level);
-        if (lvl === activeDraft.intensity) {
-          btn.className = 'intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all bg-indigo-600 text-white border-indigo-600 shadow-md';
-        } else {
-          btn.className = 'intensity-btn flex-1 py-2 rounded-xl text-xs font-bold border transition-all text-slate-600 border-slate-200 hover:bg-indigo-50';
+      const target=document.getElementById('multi-intensity-list');target.innerHTML='';
+      activeDraft.emotions.forEach(item=>{
+        const def=EMOTION_DEFINITIONS.find(d=>d.id===item.id),panel=document.createElement('div');panel.className='w-full p-3 rounded-2xl border border-slate-200 bg-white';
+        panel.innerHTML='<div class="flex items-center gap-2 mb-2"><div class="w-10 h-10">'+def.svg+'</div><span class="font-bold text-sm">'+def.name+'</span><span class="text-xs text-slate-500 ml-auto">強度 '+item.intensity+'/5</span></div>';
+        const row=document.createElement('div');row.className='flex gap-2';
+        for(let level=1;level<=5;level++){
+          const button=document.createElement('button');button.type='button';button.textContent=level;button.setAttribute('aria-label',def.name+'強度'+level);button.setAttribute('aria-pressed',String(level===item.intensity));
+          button.className='flex-1 py-2 rounded-xl border text-sm font-bold '+(level===item.intensity?'bg-indigo-600 border-indigo-600 text-white':'border-slate-200');
+          button.onclick=()=>{item.intensity=level;activeDraft.intensity=activeDraft.emotions[0].intensity;playSoundEffect('click');renderStep2Preview();};row.appendChild(button);
         }
+        panel.appendChild(row);target.appendChild(panel);
       });
+      const custom=document.getElementById('custom-emotion-input-wrap');custom.classList.toggle('hidden',!activeDraft.emotions.some(item=>item.id==='custom_other'));
+      document.getElementById('custom-emotion-name').value=activeDraft.customName||'';
     }
 
     function selectIntensity(lvl) {
@@ -2191,7 +2188,7 @@
     }
 
     function renderStep3Inputs() {
-      if (activeDraft.emotionId === 'custom_other') {
+      if (activeDraft.emotions.some(item=>item.id==='custom_other')) {
         activeDraft.customName = document.getElementById('custom-emotion-name').value.trim() || '其他';
       }
 
@@ -2222,7 +2219,7 @@
     }
 
     async function submitEmotionRecord() {
-      if (activeDraft.emotionId === 'custom_other') {
+      if (activeDraft.emotions.some(item=>item.id==='custom_other')) {
         activeDraft.customName = document.getElementById('custom-emotion-name').value.trim() || '其他心情';
       }
       activeDraft.note = document.getElementById('note-input').value.trim();
@@ -2259,11 +2256,11 @@
       const def = EMOTION_DEFINITIONS.find(d => d.id === activeDraft.emotionId);
       const summary = document.getElementById('summary-card-render');
       summary.style.backgroundColor = def.bg;
-      const displayName = activeDraft.emotionId === 'custom_other' ? activeDraft.customName : def.name;
+      const displayName = emotionNames(activeDraft);
       summary.innerHTML = `
         <div class="w-16 h-16 mx-auto mb-2">${def.svg}</div>
         <div class="font-black text-slate-800 text-base title-font">${escapeHTML(displayName)}</div>
-        <div class="text-[11px] text-slate-500 font-bold mt-1">強度：${'⭐'.repeat(activeDraft.intensity)}</div>
+        <div class="text-[11px] text-slate-500 font-bold mt-1">${escapeHTML(emotionNames(activeDraft,true))}</div>
         <div class="text-[10px] text-slate-600 mt-2 line-clamp-2 bg-white/70 p-1.5 rounded-lg">
           ${escapeHTML(activeDraft.note || '今日給自己的專屬時光')}
         </div>
@@ -2336,7 +2333,7 @@
             <div class="text-[10px] text-slate-400 text-right">${escapeHTML(record.timestamp)}</div>
           `;
         } else {
-          const displayName = record.emotionId === 'custom_other' ? record.customName : def.name;
+          const displayName = emotionNames(record,true);
           const reasonText = (record.reasons || []).map(rid => {
             const rObj = REASON_OPTIONS.find(o => o.id === rid);
             return rObj ? rObj.label : '';
@@ -2358,7 +2355,6 @@
               <div>
                 <div class="text-xs font-black text-slate-800 title-font flex items-center gap-1">
                   <span>${escapeHTML(displayName)}</span>
-                  <span class="text-[10px] text-amber-500 font-bold">${'★'.repeat(record.intensity)}</span>
                 </div>
                 <div class="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                   ${reasonText ? `原因：${reasonText}` : def.desc}
@@ -2416,15 +2412,15 @@
     async function makeDailySummaryImages(records, date, teacher) {
       const width=1080, measure=document.createElement('canvas').getContext('2d');
       const font=(ctx,size,bold=false)=>{ctx.font=(bold?'700 ':'500 ')+size+'px "Zen Maru Gothic", sans-serif';};
-      const counts=EMOTION_DEFINITIONS.map(def=>({def,count:records.filter(r=>r.emotionId===def.id).length})).filter(item=>item.count);
+      const counts=EMOTION_DEFINITIONS.map(def=>({def,count:records.filter(r=>recordEmotions(r).some(item=>item.id===def.id)).length})).filter(item=>item.count);
       const chartHeight=Math.max(64,counts.length*45);
       const headerHeight=340+chartHeight;
       const cards=records.map(record=>{
         const def=EMOTION_DEFINITIONS.find(d=>d.id===record.emotionId);
-        const name=record.emotionId==='custom_other'?(record.customName||'其他心情'):(def?.name||'未分類');
+        const name=emotionNames(record,true);
         font(measure,26,true);
         const heading=summaryWrap(measure,(record.group||'')+' '+(record.studentName||'未具名')+(record.isPublic?'':' · 私人紀錄'),880);
-        const emotion=summaryWrap(measure,name+'　強度 '+Math.max(1,Math.min(5,Number(record.intensity)||3))+'/5',880);
+        const emotion=summaryWrap(measure,name,880);
         font(measure,23);
         const reasons=(Array.isArray(record.reasons)?record.reasons:[]).map(id=>REASON_OPTIONS.find(r=>r.id===id)?.label).filter(Boolean).join('、');
         const detail=summaryWrap(measure,'原因：'+(reasons||'未填寫'),880);
@@ -2450,7 +2446,7 @@
           font(ctx,20);ctx.fillStyle='#64748b';ctx.fillText(label,86+i*318,197);
           font(ctx,30,true);ctx.fillStyle='#243951';ctx.fillText(String(value),86+i*318,232);
         });
-        font(ctx,23,true);ctx.fillStyle='#334155';ctx.fillText('當日心情分布',66,290);
+        font(ctx,23,true);ctx.fillStyle='#334155';ctx.fillText('當日心情分布（可複選，每種各計一次）',66,290);
         if(!counts.length){font(ctx,23);ctx.fillStyle='#94a3b8';ctx.fillText('此日期尚無可匯出的紀錄',66,337);}
         counts.forEach(({def,count},i)=>{
           const y=320+i*45; font(ctx,22);ctx.fillStyle='#475569';ctx.fillText(def.name,66,y+22);
