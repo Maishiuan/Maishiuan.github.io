@@ -1206,6 +1206,22 @@
 
       kid.add(headGroup);
 
+      if (config.seated) {
+        for (const part of [torsoGroup, headGroup, leftArmPivot, rightArmPivot]) {
+          part.position.y -= 0.24;
+        }
+        for (const leg of [leftLeg, rightLeg]) {
+          const [shoe, pants] = leg.children;
+          shoe.position.z = 0.64;
+          pants.position.y = 0.14;
+          pants.position.z = 0.39;
+          pants.rotation.x = Math.PI / 2;
+        }
+        headGroup.rotation.x = -0.24;
+        leftArmPivot.rotation.set(-0.62, 0, 0.18);
+        rightArmPivot.rotation.set(-0.62, 0, -0.18);
+      }
+
       kid.userData = {
         headGroup,
         leftArmPivot,
@@ -1213,6 +1229,7 @@
         leftLeg,
         rightLeg,
         phase: config.phase,
+        seated: config.seated,
         hairPieces: { bun, twintails, bob },
         bodyCone, skirtHem, overalls, dressMat
       };
@@ -1902,12 +1919,19 @@
         [-9.4, 0.0], [-8.1, -3.3], [-5.6, -6.1, 1.1, -0.4], [-2.4, -7.4],
         [1.1, -7.9, 1.0, 0.3], [4.8, -6.8], [8.3, -4.5], [10.6, -0.8, 0.3, 1.1],
         [9.3, 3.4], [6.5, 6.3, 1.0, -0.6], [3.0, 8.2], [-0.8, 7.3],
-        [-9.9, 6.2], [3.1, 4.35], [10.7, 6.7]
+        // Teachers sit in a shallow arc around the front of the tree.
+        [-1.9, 2.55], [0, 3.6], [2.15, 2.9]
       ];
       const hairColors = [0x451a03, 0x1e1b4b, 0x78350f, 0x3b0764];
       students.forEach((student, index) => {
         const [x, z, walkX = 0, walkZ = 0] = avatarSpots[index % avatarSpots.length];
-        const kid = createCuteKid({ shirtColor: avatarColors.mint, hairColor: hairColors[index % hairColors.length], phase: index * 0.8 });
+        const seated = student.group === '老師';
+        const kid = createCuteKid({
+          shirtColor: avatarColors.mint,
+          hairColor: hairColors[index % hairColors.length],
+          phase: index * 0.8,
+          seated
+        });
         const defaults = {
           hair: avatarHairStyles[index % avatarHairStyles.length],
           outfit: avatarOutfits[index % avatarOutfits.length],
@@ -1915,7 +1939,12 @@
         };
         Object.assign(kid.userData, { student, x, z, walkX, walkZ, look: getAvatarLook(student.id, defaults) });
         applyAvatarLook(kid);
-        kid.add(createAvatarNameTag(student.name));
+        const nameTag = createAvatarNameTag(student.name);
+        if (seated) {
+          nameTag.position.y -= 0.24;
+          kid.rotation.y = Math.atan2(x, z);
+        }
+        kid.add(nameTag);
         kid.position.set(x, 0.15, z);
         islandGroup.add(kid);
         kidsGroup.push(kid);
@@ -2038,6 +2067,10 @@
       kidsGroup.forEach((kid) => {
         const u = kid.userData;
         const p = t * 2.2 + u.phase;
+        if (u.seated) {
+          u.headGroup.rotation.z = Math.sin(p * 0.35) * 0.045;
+          return;
+        }
         kid.rotation.y = -islandGroup.rotation.y + Math.sin(p * 0.36) * 0.24;
         kid.position.y = 0.15 + Math.abs(Math.sin(p)) * 0.12;
         if (u.walkX || u.walkZ) {
