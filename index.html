@@ -162,9 +162,12 @@
       <form method="dialog"><button class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold">關閉</button></form>
     </div>
     <p id="avatar-greeting" class="my-2 rounded-xl bg-indigo-50 p-2 text-sm text-indigo-800" aria-live="polite"></p>
-    <label class="block text-sm font-bold">小人物
-      <select id="avatar-student" class="mt-1"></select>
-    </label>
+    <div class="flex items-center gap-3">
+      <canvas id="avatar-preview" width="168" height="168" class="h-20 w-20 shrink-0 rounded-2xl bg-indigo-50" aria-label="小人物造型預覽"></canvas>
+      <label class="min-w-0 flex-1 text-sm font-bold">小人物
+        <select id="avatar-student" class="mt-1"></select>
+      </label>
+    </div>
     <div class="mt-2 grid grid-cols-2 gap-2">
       <label class="text-sm font-bold">髮型
         <select id="avatar-hair" class="mt-1">
@@ -1485,6 +1488,39 @@
       return label;
     }
 
+    function drawAvatarPreview(kid) {
+      const canvas = document.getElementById('avatar-preview');
+      const portrait = new THREE.Scene();
+      const figure = new THREE.Group();
+      for (const part of kid.children) {
+        if (!part.isSprite) figure.add(part.clone());
+      }
+      figure.rotation.y = -0.25;
+      portrait.add(figure, new THREE.HemisphereLight(0xffffff, 0xc7d2fe, 1.35));
+      const light = new THREE.DirectionalLight(0xfffbeb, 1.3);
+      light.position.set(3, 5, 5);
+      portrait.add(light);
+      const portraitCamera = new THREE.OrthographicCamera(-1.45, 1.45, 1.45, -1.45, 0.1, 20);
+      portraitCamera.position.set(0, 2.5, 6);
+      portraitCamera.lookAt(0, 1.2, 0);
+
+      // Capture the portrait with the existing renderer, then restore the island viewport.
+      const viewport = renderer.getViewport(new THREE.Vector4());
+      const side = Math.min(canvas.width, viewport.z, viewport.w);
+      renderer.setViewport(0, 0, side, side);
+      try {
+        renderer.render(portrait, portraitCamera);
+        const source = renderer.domElement;
+        const pixels = Math.floor(side * renderer.getPixelRatio());
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(source, 0, source.height - pixels, pixels, pixels, 0, 0, canvas.width, canvas.height);
+      } finally {
+        renderer.setViewport(viewport);
+        renderer.render(scene, camera);
+      }
+    }
+
     function setupAvatarDialog() {
       const studentPicker = document.getElementById('avatar-student');
       const launch = document.getElementById('avatar-launch');
@@ -1503,6 +1539,7 @@
           const { student, look } = kid.userData;
           look[field] = input.value;
           applyAvatarLook(kid);
+          drawAvatarPreview(kid);
           avatarLooks[student.id] = look;
           const status = document.getElementById('avatar-save-status');
           try {
@@ -1532,6 +1569,7 @@
       document.getElementById('avatar-save-status').textContent = '換裝會自動記在這個瀏覽器。';
       const dialog = document.getElementById('avatar-dialog');
       if (!dialog.open) dialog.showModal();
+      drawAvatarPreview(kid);
       playSoundEffect('click');
     }
 
@@ -2059,6 +2097,7 @@
         }
         u.headGroup.rotation.z = Math.sin(p * 0.7) * 0.12;
         u.headGroup.rotation.y = Math.cos(p * 0.5) * 0.18;
+        u.headGroup.rotation.x = -0.24;
         u.leftArmPivot.rotation.z = 0.45 + Math.sin(p * 1.5) * 0.35;
         u.rightArmPivot.rotation.z = -0.45 - Math.cos(p * 1.5) * 0.35;
       });
