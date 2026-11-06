@@ -1609,48 +1609,8 @@
       });
     }
 
-    let islandGorilla=null,skySun=null,skyMoon=null,skyStars=null,skyRain=null,environmentLights=null;
+    let skySun=null,skyMoon=null,skyStars=null,skyRain=null,environmentLights=null;
     let sceneWeather='clear',sceneTime='day',lastEnvironmentFrame=0;
-    function createIslandGorilla(){
-      const gorilla=new THREE.Group(),fur=new THREE.MeshStandardMaterial({color:0x454650,roughness:0.8}),faceMat=new THREE.MeshStandardMaterial({color:0xb3b4c1,roughness:0.7}),black=new THREE.MeshBasicMaterial({color:0x20212a}),white=new THREE.MeshBasicMaterial({color:0xffffff});
-      function ball(parent,r,mat,x,y,z,sx=1,sy=1,sz=1){const m=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),mat);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;parent.add(m);return m;}
-      ball(gorilla,0.65,fur,0,0.99,-0.07,1.1,1.05,0.78);
-      ball(gorilla,0.4,fur,0,1.47,-0.08,1.5,0.65,0.8);
-      for(const side of [-1,1])ball(gorilla,0.27,faceMat,side*0.23,1.02,0.43,1,0.9,0.27);
-      ball(gorilla,0.38,faceMat,0,0.69,0.39,1.2,0.55,0.25);
-      const head=new THREE.Group();head.position.set(0,1.91,0.1);gorilla.add(head);
-      ball(head,0.58,fur,0,0,0,1.04,1,0.84);
-      for(const side of [-1,1]){
-        ball(head,0.16,fur,side*0.55,-0.03,0.02);ball(head,0.1,faceMat,side*0.57,-0.03,0.12,1,1,0.4);
-        ball(head,0.32,faceMat,side*0.18,-0.05,0.42,1,1.17,0.48);
-        ball(head,0.095,black,side*0.21,0.015,0.586,1,1.17,0.6);
-        ball(head,0.03,white,side*0.21+0.027,0.055,0.64);
-      }
-      ball(head,0.29,faceMat,0,-0.24,0.47,1.15,0.75,0.65);
-      ball(head,0.13,fur,0,-0.13,0.65,1.3,0.7,0.4);
-      for(const side of [-1,1])ball(head,0.026,black,side*0.06,-0.13,0.705);
-      const smile=new THREE.Mesh(new THREE.TorusGeometry(0.11,0.02,8,18,Math.PI),black);smile.rotation.x=Math.PI;smile.position.set(0,-0.29,0.68);head.add(smile);
-      const arms=[],legs=[];
-      for(const side of [-1,1]){
-        const arm=new THREE.Group();arm.position.set(side*0.57,1.28,0.02);gorilla.add(arm);
-        const limb=createRoundedLimb(0.23,0.8,fur);limb.position.set(0,-0.35,0.16);limb.rotation.x=-0.18;arm.add(limb);
-        ball(arm,0.23,fur,0,-0.94,0.36,1.1,0.85,1.1);
-        ball(arm,0.16,faceMat,0,-0.99,0.49,1.2,0.55,0.5);arms.push(arm);
-        const leg=new THREE.Group();leg.position.set(side*0.34,0.47,-0.18);gorilla.add(leg);
-        ball(leg,0.24,fur,0,-0.12,0,0.95,1.3,1);ball(leg,0.23,fur,0,-0.32,0.12,1,0.6,1.5);legs.push(leg);
-      }
-      gorilla.scale.setScalar(0.94);gorilla.userData={head,arms,legs};return gorilla;
-    }
-    function animateIslandGorilla(seconds){
-      if(!islandGorilla)return;
-      const a=-seconds*0.12+1.5,step=seconds*3.8,u=islandGorilla.userData;
-      islandGorilla.position.set(Math.cos(a)*10.5,0.15+Math.abs(Math.sin(step))*0.055,Math.sin(a)*9.7);
-      islandGorilla.rotation.y=Math.atan2(Math.sin(a)*10.5,-Math.cos(a)*9.7);
-      islandGorilla.rotation.z=Math.sin(step)*0.055;islandGorilla.rotation.x=0.08;
-      u.arms.forEach((arm,i)=>arm.rotation.x=Math.sin(step+i*Math.PI)*0.22);
-      u.legs.forEach((leg,i)=>leg.rotation.x=-Math.sin(step+i*Math.PI)*0.23);
-      u.head.rotation.y=Math.sin(seconds*0.7)*0.09;u.head.rotation.x=-0.06;
-    }
     function skyTexture(moon){
       const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;const ctx=canvas.getContext('2d');
       const glow=ctx.createRadialGradient(128,128,40,128,128,125);glow.addColorStop(0,moon?'rgba(231,241,255,.35)':'rgba(255,216,64,.35)');glow.addColorStop(1,'rgba(255,230,150,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,256,256);
@@ -1941,10 +1901,11 @@
       const avatarSpots = [
         [-9.4, 0.0], [-8.1, -3.3], [-5.6, -6.1, 1.1, -0.4], [-2.4, -7.4],
         [1.1, -7.9, 1.0, 0.3], [4.8, -6.8], [8.3, -4.5], [10.6, -0.8, 0.3, 1.1],
-        [9.3, 3.4], [6.5, 6.3, 1.0, -0.6], [3.0, 8.2], [-0.8, 7.3]
+        [9.3, 3.4], [6.5, 6.3, 1.0, -0.6], [3.0, 8.2], [-0.8, 7.3],
+        [-9.9, 6.2], [3.1, 4.35], [10.7, 6.7]
       ];
       const hairColors = [0x451a03, 0x1e1b4b, 0x78350f, 0x3b0764];
-      students.filter(student => student.group !== '老師').forEach((student, index) => {
+      students.forEach((student, index) => {
         const [x, z, walkX = 0, walkZ = 0] = avatarSpots[index % avatarSpots.length];
         const kid = createCuteKid({ shirtColor: avatarColors.mint, hairColor: hairColors[index % hairColors.length], phase: index * 0.8 });
         const defaults = {
@@ -1996,7 +1957,6 @@
       islandMonkey=createIslandMonkey();
       islandMonkey.scale.setScalar(0.7);
       islandGroup.add(islandMonkey);
-      islandGorilla=createIslandGorilla();islandGroup.add(islandGorilla);
       setupIslandEnvironment();
       rainbowCat = createRainbowCat();
       setupInteractionEvents(renderer.domElement);
@@ -2133,7 +2093,6 @@
       });
 
       animatePondFish(performance.now() / 1000);
-      animateIslandGorilla(performance.now() / 1000);
       animateIslandEnvironment(performance.now() / 1000);
       animateIslandMonkey(performance.now() / 1000);
       animateRainbowCat(performance.now() / 1000);
