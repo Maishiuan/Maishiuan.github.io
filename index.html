@@ -128,12 +128,14 @@
       #bottom-hud #app-footer { width:auto; }
     }
 
-    #kid-greeting { position:absolute; z-index:35; pointer-events:none; max-width:min(240px,calc(100vw - 28px)); padding:10px 14px; border:2px solid #fff; border-radius:18px; background:rgba(255,255,255,.97); color:#475569; font-size:13px; font-weight:700; line-height:1.6; text-align:center; box-shadow:0 5px 20px rgba(78,91,127,.2); transform:translate(-50%,-100%); }
-    #kid-greeting[hidden] { display:none; }
-    #kid-greeting::after { content:''; position:absolute; bottom:-8px; left:calc(50% - 7px); border-left:7px solid transparent; border-right:7px solid transparent; border-top:8px solid white; }
-    .greeting-pop { animation:kid-greeting-pop .22s ease-out; }
-    @keyframes kid-greeting-pop { from { opacity:0; margin-top:6px; } to { opacity:1; margin-top:0; } }
-    @media(prefers-reduced-motion:reduce) { .greeting-pop { animation:none; } }
+    #avatar-launch { position:absolute; z-index:1; left:max(12px,env(safe-area-inset-left)); top:78px; min-height:40px; padding:6px 12px; border-radius:16px; background:#fff; color:#4338ca; font-size:13px; font-weight:700; box-shadow:0 3px 12px #33415526; }
+    #avatar-dialog { box-sizing:border-box; width:min(340px,calc(100% - 24px)); max-height:calc(var(--app-height) - 24px); overflow:auto; margin:auto max(16px,env(safe-area-inset-right)) auto auto; }
+    #avatar-dialog::backdrop { background:rgba(15,23,42,.16); }
+    #avatar-dialog select { width:100%; background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:8px; color:#334155; }
+    @media(max-width:640px),(max-height:500px) {
+      #avatar-launch { top:8px; }
+      #avatar-dialog { margin:auto auto max(12px,env(safe-area-inset-bottom)); }
+    }
 
     #environment-controls { position:fixed; top:124px; right:16px; z-index:40; display:flex; gap:8px; align-items:center; pointer-events:auto; }
     .weather-pickers { display:flex; gap:6px; align-items:center; }
@@ -150,7 +152,38 @@
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
 
   <!-- 3D 渲染畫布容器 -->
-  <div id="canvas-container" class="absolute inset-0 z-0"></div>
+  <div id="canvas-container" class="absolute inset-0 z-0">
+    <button id="avatar-launch" type="button" hidden>🎨 小人換裝</button>
+  </div>
+
+  <dialog id="avatar-dialog" class="rounded-3xl bg-white p-4 text-slate-800 shadow-xl" aria-labelledby="avatar-title">
+    <div class="flex items-center justify-between gap-3">
+      <h2 id="avatar-title" class="text-lg font-black text-indigo-700">🎨 小人換裝</h2>
+      <form method="dialog"><button class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold">關閉</button></form>
+    </div>
+    <p id="avatar-greeting" class="my-2 rounded-xl bg-indigo-50 p-2 text-sm text-indigo-800" aria-live="polite"></p>
+    <label class="block text-sm font-bold">小人物
+      <select id="avatar-student" class="mt-1"></select>
+    </label>
+    <div class="mt-2 grid grid-cols-2 gap-2">
+      <label class="text-sm font-bold">髮型
+        <select id="avatar-hair" class="mt-1">
+          <option value="short">短瀏海</option><option value="bun">丸子頭</option><option value="twintails">雙馬尾</option><option value="bob">齊耳短髮</option>
+        </select>
+      </label>
+      <label class="text-sm font-bold">服裝
+        <select id="avatar-outfit" class="mt-1">
+          <option value="tee">休閒 T 恤</option><option value="dress">圓領洋裝</option><option value="overalls">吊帶褲</option>
+        </select>
+      </label>
+    </div>
+    <label class="mt-2 block text-sm font-bold">服裝顏色
+      <select id="avatar-color" class="mt-1">
+        <option value="mint">薄荷綠</option><option value="sky">天空藍</option><option value="lavender">薰衣草紫</option><option value="peach">蜜桃粉</option><option value="sun">陽光黃</option><option value="orange">橘子橙</option>
+      </select>
+    </label>
+    <p id="avatar-save-status" class="mt-2 text-xs text-slate-600" role="status">換裝會自動記在這個瀏覽器。</p>
+  </dialog>
 
   <!-- 頂部導航 HUD -->
   <header id="app-header" class="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center pointer-events-none">
@@ -220,7 +253,7 @@
   <div class="absolute bottom-6 left-6 z-20 pointer-events-none hidden md:block">
     <div class="bg-slate-900/40 backdrop-blur-sm text-white text-[11px] px-3.5 py-2 rounded-2xl flex items-center gap-2 shadow-sm">
       <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
-      <span>點小人物打招呼 · 拖曳旋轉島嶼，滾輪縮放</span>
+      <span>點小人物打招呼和換裝 · 拖曳旋轉島嶼，滾輪縮放</span>
     </div>
   </div>
 
@@ -1019,6 +1052,7 @@
       kid.add(shadowPad);
 
       const leftLeg = new THREE.Group();
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x475d85 });
       const lShoe = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), shoeMat);
       lShoe.scale.set(1, 0.75, 1.35);
       lShoe.position.set(-0.2, 0.14, 0.05);
@@ -1032,6 +1066,12 @@
       rightLeg.add(rShoe);
       kid.add(rightLeg);
 
+      for (const [leg, x] of [[leftLeg, -0.2], [rightLeg, 0.2]]) {
+        const pantLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.36, 12), pantsMat);
+        pantLeg.position.set(x, 0.29, 0);
+        leg.add(pantLeg);
+      }
+
       const torsoGroup = new THREE.Group();
       const bodyCone = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.52, 0.85, 28), dressMat);
       bodyCone.position.y = 0.65;
@@ -1042,6 +1082,20 @@
       skirtHem.rotation.x = Math.PI / 2;
       skirtHem.position.y = 0.25;
       torsoGroup.add(skirtHem);
+
+      const overalls = new THREE.Group();
+      const bib = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.37, 0.17), pantsMat);
+      bib.position.set(0, 0.56, 0.25);
+      overalls.add(bib);
+      const buckleMat = new THREE.MeshBasicMaterial({ color: 0xfde68a });
+      for (const x of [-0.15, 0.15]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.37, 0.07), pantsMat);
+        strap.position.set(x, 0.85, 0.29);
+        const buckle = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), buckleMat);
+        buckle.position.set(x, 0.72, 0.34);
+        overalls.add(strap, buckle);
+      }
+      torsoGroup.add(overalls);
 
       const collar = new THREE.Mesh(
         new THREE.TorusGeometry(0.3, 0.055, 12, 24),
@@ -1131,31 +1185,21 @@
         headGroup.add(bang);
       }
 
-      if (config.style === 'bun') {
-        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 20), hairMat);
-        bun.position.set(0, 0.62, -0.08);
-        headGroup.add(bun);
-      } else if (config.style === 'twintails') {
-        const lTail = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), hairMat);
-        lTail.scale.set(0.9, 1.3, 0.9);
-        lTail.position.set(-0.56, 0.15, -0.1);
-        const rTail = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), hairMat);
-        rTail.scale.set(0.9, 1.3, 0.9);
-        rTail.position.set(0.56, 0.15, -0.1);
-        headGroup.add(lTail, rTail);
-      } else if (config.style === 'cap') {
-        const capMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 });
-        const visor = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 16), capMat);
-        visor.scale.set(1.2, 0.22, 0.9);
-        visor.position.set(0, 0.32, 0.42);
-        const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), whiteMat);
-        capTop.position.set(0, 0.6, 0);
-        headGroup.add(visor, capTop);
-      } else {
-        const sprout = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 0.3 }));
-        sprout.position.set(0, 0.66, 0);
-        headGroup.add(sprout);
+      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), hairMat);
+      bun.position.set(0, 0.62, -0.08);
+      const twintails = new THREE.Group();
+      const bob = new THREE.Group();
+      for (const side of [-1, 1]) {
+        const tail = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), hairMat);
+        tail.scale.set(0.9, 1.45, 0.9);
+        tail.position.set(side * 0.54, 0.06, -0.09);
+        twintails.add(tail);
+        const lock = new THREE.Mesh(new THREE.SphereGeometry(0.29, 16, 12), hairMat);
+        lock.scale.set(0.65, 1.22, 1.1);
+        lock.position.set(side * 0.44, -0.11, -0.1);
+        bob.add(lock);
       }
+      headGroup.add(bun, twintails, bob);
 
       kid.add(headGroup);
 
@@ -1165,7 +1209,9 @@
         rightArmPivot,
         leftLeg,
         rightLeg,
-        phase: config.phase
+        phase: config.phase,
+        hairPieces: { bun, twintails, bob },
+        bodyCone, skirtHem, overalls, dressMat
       };
 
       return kid;
@@ -1323,8 +1369,7 @@
       rainbowCat.material.map=data.textures[Math.floor(seconds*7)%4][facingLeft];
     }
 
-    let islandMonkey = null, activeKidBubble = null, kidBubbleTimer = null;
-    const kidBubblePoint = new THREE.Vector3();
+    let islandMonkey = null;
     const kidGreetings = ['👋 嗨～很高興見到你！','😊 今天也一起慢慢來吧。','🌈 每一種心情都可以來島上。','✨ 送你一點小小的勇氣！','😄 哈囉！要一起散步嗎？','🌻 謝謝你來陪我！','💛 累了就休息一下吧。','🙌 擊掌！你今天辛苦了！','🐵 你有看到島上的小猴子嗎？','🥰 很開心和你一起待在島上。','😎 耶！我們又見面了！','🍀 願你今天遇到一件舒服的小事。'];
     function createIslandMonkey() {
       const monkey=new THREE.Group();
@@ -1379,33 +1424,121 @@
       data.tail.rotation.y=Math.sin(seconds*4)*0.25;data.tail.rotation.x=Math.sin(stride)*0.09;
       data.head.rotation.z=Math.sin(seconds*2.2)*0.065;data.head.rotation.x=-hop*0.07;
     }
-    function showKidGreeting(kid) {
-      let bubble=document.getElementById('kid-greeting');
-      if(!bubble){bubble=document.createElement('div');bubble.id='kid-greeting';bubble.setAttribute('role','status');bubble.setAttribute('aria-live','polite');document.body.appendChild(bubble);}
-      const last=kid.userData.lastGreeting??-1;
-      const index=last<0?Math.floor(Math.random()*kidGreetings.length):(last+1+Math.floor(Math.random()*(kidGreetings.length-1)))%kidGreetings.length;
-      kid.userData.lastGreeting=index;activeKidBubble=kid;
-      bubble.textContent=kidGreetings[index];bubble.hidden=false;
-      bubble.classList.remove('greeting-pop');requestAnimationFrame(()=>bubble.classList.add('greeting-pop'));
-      clearTimeout(kidBubbleTimer);kidBubbleTimer=setTimeout(()=>{bubble.hidden=true;activeKidBubble=null;},4200);
-      updateKidGreeting();playSoundEffect('click');
+    const avatarHairStyles = ['short', 'bun', 'twintails', 'bob'];
+    const avatarOutfits = ['tee', 'dress', 'overalls'];
+    const avatarColors = {
+      mint: 0x34d399, sky: 0x38bdf8, lavender: 0xa855f7,
+      peach: 0xf472b6, sun: 0xfacc15, orange: 0xf97316
+    };
+    const avatarStorageKey = 'emotion_island_avatar_looks';
+    let avatarLooks = {};
+    try {
+      const stored = JSON.parse(localStorage.getItem(avatarStorageKey));
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) avatarLooks = stored;
+    } catch {}
+
+    function getAvatarLook(id, defaults) {
+      const saved = avatarLooks[id];
+      return {
+        hair: avatarHairStyles.includes(saved?.hair) ? saved.hair : defaults.hair,
+        outfit: avatarOutfits.includes(saved?.outfit) ? saved.outfit : defaults.outfit,
+        color: Object.hasOwn(avatarColors, saved?.color) ? saved.color : defaults.color
+      };
     }
-    function updateKidGreeting() {
-      if(!activeKidBubble)return;
-      const bubble=document.getElementById('kid-greeting'),area=document.getElementById('canvas-container').getBoundingClientRect();
-      activeKidBubble.localToWorld(kidBubblePoint.set(0,2.45,0));kidBubblePoint.project(camera);
-      if(kidBubblePoint.z>1||kidBubblePoint.z< -1){bubble.style.visibility='hidden';return;}
-      bubble.style.visibility='visible';
-      const half=bubble.offsetWidth/2;
-      const x=area.left+(kidBubblePoint.x+1)*area.width/2;
-      const y=area.top+(1-kidBubblePoint.y)*area.height/2-12;
-      bubble.style.left=Math.max(area.left+half+6,Math.min(area.right-half-6,x))+'px';
-      bubble.style.top=Math.max(area.top+bubble.offsetHeight+8,Math.min(area.bottom-8,y))+'px';
+
+    function applyAvatarLook(kid) {
+      const { hairPieces, bodyCone, skirtHem, overalls, dressMat, look } = kid.userData;
+      for (const [style, piece] of Object.entries(hairPieces)) piece.visible = style === look.hair;
+      const hasSkirt = look.outfit === 'dress';
+      bodyCone.scale.set(hasSkirt ? 1 : 0.74, hasSkirt ? 1 : 0.82, hasSkirt ? 1 : 0.74);
+      bodyCone.position.y = hasSkirt ? 0.65 : 0.71;
+      skirtHem.visible = hasSkirt;
+      overalls.visible = look.outfit === 'overalls';
+      dressMat.color.setHex(avatarColors[look.color]);
     }
-    function setupKidGreetings(dom) {
+
+    function createAvatarNameTag(name) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 192;
+      canvas.height = 80;
+      const ctx = canvas.getContext('2d');
+      ctx.font = 'bold 48px sans-serif';
+      const width = Math.min(188, Math.ceil(ctx.measureText(name).width) + 32);
+      const x = (canvas.width - width) / 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(x + 32, 8);
+      ctx.arcTo(x + width, 8, x + width, 72, 32);
+      ctx.arcTo(x + width, 72, x, 72, 32);
+      ctx.arcTo(x, 72, x, 8, 32);
+      ctx.arcTo(x, 8, x + width, 8, 32);
+      ctx.fill();
+      ctx.fillStyle = '#312e81';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, 96, 41, 160);
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(canvas), transparent: true, alphaTest: 0.15, depthWrite: false, fog: false
+      }));
+      label.position.y = 2.68;
+      label.scale.set(3.1, 1.29, 1);
+      return label;
+    }
+
+    function setupAvatarDialog() {
+      const studentPicker = document.getElementById('avatar-student');
+      const launch = document.getElementById('avatar-launch');
+      const fields = {
+        hair: document.getElementById('avatar-hair'),
+        outfit: document.getElementById('avatar-outfit'),
+        color: document.getElementById('avatar-color')
+      };
+      for (const {userData: {student}} of kidsGroup) studentPicker.add(new Option(student.name, student.id));
+      const selectedKid = () => kidsGroup.find(kid => kid.userData.student.id === studentPicker.value);
+      studentPicker.addEventListener('change', () => openAvatarDialog(selectedKid()));
+      for (const [field, input] of Object.entries(fields)) {
+        input.addEventListener('change', () => {
+          const kid = selectedKid();
+          if (!kid) return;
+          const { student, look } = kid.userData;
+          look[field] = input.value;
+          applyAvatarLook(kid);
+          avatarLooks[student.id] = look;
+          const status = document.getElementById('avatar-save-status');
+          try {
+            localStorage.setItem(avatarStorageKey, JSON.stringify(avatarLooks));
+            status.textContent = '已儲存在這個瀏覽器。';
+          } catch {
+            status.textContent = '已換裝，這次開啟網頁期間有效。';
+          }
+        });
+      }
+      launch.addEventListener('click', () => openAvatarDialog(
+        kidsGroup.find(kid => kid.userData.student.id === currentStudent?.id) || selectedKid() || kidsGroup[0]
+      ));
+      launch.hidden = !kidsGroup.length;
+    }
+
+    function openAvatarDialog(kid) {
+      if (!kid) return;
+      const { student, look, lastGreeting = -1 } = kid.userData;
+      const index = (lastGreeting + 1 + Math.floor(Math.random() * (kidGreetings.length - 1))) % kidGreetings.length;
+      kid.userData.lastGreeting = index;
+      document.getElementById('avatar-student').value = student.id;
+      document.getElementById('avatar-hair').value = look.hair;
+      document.getElementById('avatar-outfit').value = look.outfit;
+      document.getElementById('avatar-color').value = look.color;
+      document.getElementById('avatar-greeting').textContent = kidGreetings[index];
+      document.getElementById('avatar-save-status').textContent = '換裝會自動記在這個瀏覽器。';
+      const dialog = document.getElementById('avatar-dialog');
+      if (!dialog.open) dialog.showModal();
+      playSoundEffect('click');
+    }
+
+    function setupAvatarInteraction(dom) {
       const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),head=new THREE.Vector3();let down=null;
       const kidOf=object=>{while(object&&object!==islandGroup){if(kidsGroup.includes(object))return object;object=object.parent;}return null;};
-      dom.addEventListener('pointerdown',event=>{if(event.isPrimary!==false)down={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};});
+      dom.addEventListener('pointerdown',event=>{if(event.isPrimary!==false&&event.button===0)down={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};});
       dom.addEventListener('pointermove',event=>{if(down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)>9)down.moved=true;});
       dom.addEventListener('pointercancel',()=>down=null);
       dom.addEventListener('pointerup',event=>{
@@ -1415,7 +1548,13 @@
         scene.updateMatrixWorld(true);
         mouse.set((event.clientX-bounds.left)/bounds.width*2-1,-(event.clientY-bounds.top)/bounds.height*2+1);
         ray.setFromCamera(mouse,camera);
-        let hits=ray.intersectObjects(islandGroup.children,true);
+        const visibleHits = () => ray.intersectObjects(islandGroup.children, true).filter(({object}) => {
+          for (let part = object; part !== islandGroup; part = part.parent) {
+            if (!part.visible) return false;
+          }
+          return true;
+        });
+        let hits=visibleHits();
         let selected=hits.length?kidOf(hits[0].object):null;
         if(!selected){
           let closest=event.pointerType==='touch'?28:18;
@@ -1424,11 +1563,11 @@
             if(head.z< -1||head.z>1)continue;
             const distance=Math.hypot(bounds.left+(head.x+1)*bounds.width/2-event.clientX,bounds.top+(1-head.y)*bounds.height/2-event.clientY);
             if(distance>=closest)continue;
-            mouse.set(head.x,head.y);ray.setFromCamera(mouse,camera);hits=ray.intersectObjects(islandGroup.children,true);
+            mouse.set(head.x,head.y);ray.setFromCamera(mouse,camera);hits=visibleHits();
             if(hits.length&&kidOf(hits[0].object)===kid){selected=kid;closest=distance;}
           }
         }
-        if(selected)showKidGreeting(selected);
+        if(selected)openAvatarDialog(selected);
       });
     }
 
@@ -1760,29 +1899,27 @@
         islandGroup.add(mush);
       });
 
-      const kidConfigs = [
-        { shirtColor: 0x34d399, hairColor: 0x451a03, style: 'sprout', phase: 0 },
-        { shirtColor: 0xa855f7, hairColor: 0x1e1b4b, style: 'twintails', phase: 0.8 },
-        { shirtColor: 0xfacc15, hairColor: 0x78350f, style: 'bun', phase: 1.6 },
-        { shirtColor: 0x38bdf8, hairColor: 0x3b0764, style: 'cap', phase: 2.4 },
-        { shirtColor: 0xf43f5e, hairColor: 0x1c1917, style: 'twintails', phase: 3.2 },
-        { shirtColor: 0xf472b6, hairColor: 0x713f12, style: 'bun', phase: 4.0 },
-        { shirtColor: 0xf97316, hairColor: 0x27272a, style: 'cap', phase: 4.8 },
-        { shirtColor: 0x06b6d4, hairColor: 0x52525b, style: 'sprout', phase: 5.6 }
+      // Short walking routes stay clear of the pond and the central tree.
+      const avatarSpots = [
+        [-9.4, 0.0], [-8.1, -3.3], [-5.6, -6.1, 1.1, -0.4], [-2.4, -7.4],
+        [1.1, -7.9, 1.0, 0.3], [4.8, -6.8], [8.3, -4.5], [10.6, -0.8, 0.3, 1.1],
+        [9.3, 3.4], [6.5, 6.3, 1.0, -0.6], [3.0, 8.2], [-0.8, 7.3]
       ];
-
-      const totalKids = kidConfigs.length;
-      kidConfigs.forEach((cfg, i) => {
-        const angle = (i / totalKids) * Math.PI * 2 + 0.25;
-        const radius = 5.6;
-        const x = Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
-
-        const kidMesh = createCuteKid(cfg);
-        kidMesh.position.set(x, 0.12, z);
-        kidMesh.rotation.y = -angle + Math.PI / 2 + 0.35;
-        islandGroup.add(kidMesh);
-        kidsGroup.push(kidMesh);
+      const hairColors = [0x451a03, 0x1e1b4b, 0x78350f, 0x3b0764];
+      students.filter(student => student.group !== '老師').forEach((student, index) => {
+        const [x, z, walkX = 0, walkZ = 0] = avatarSpots[index % avatarSpots.length];
+        const kid = createCuteKid({ shirtColor: avatarColors.mint, hairColor: hairColors[index % hairColors.length], phase: index * 0.8 });
+        const defaults = {
+          hair: avatarHairStyles[index % avatarHairStyles.length],
+          outfit: avatarOutfits[index % avatarOutfits.length],
+          color: Object.keys(avatarColors)[index % Object.keys(avatarColors).length]
+        };
+        Object.assign(kid.userData, { student, x, z, walkX, walkZ, look: getAvatarLook(student.id, defaults) });
+        applyAvatarLook(kid);
+        kid.add(createAvatarNameTag(student.name));
+        kid.position.set(x, 0.15, z);
+        islandGroup.add(kid);
+        kidsGroup.push(kid);
       });
 
       shibaDog = createCuteShiba();
@@ -1824,8 +1961,9 @@
       islandGorilla=createIslandGorilla();islandGroup.add(islandGorilla);
       setupIslandEnvironment();
       rainbowCat = createRainbowCat();
-      setupInteractionEvents(container);
-      setupKidGreetings(container);
+      setupInteractionEvents(renderer.domElement);
+      setupAvatarInteraction(renderer.domElement);
+      setupAvatarDialog();
       animateScene();
       new ResizeObserver(onWindowResize).observe(container);
       onWindowResize();
@@ -1902,7 +2040,23 @@
       kidsGroup.forEach((kid) => {
         const u = kid.userData;
         const p = t * 2.2 + u.phase;
-        kid.position.y = 0.12 + Math.abs(Math.sin(p)) * 0.16;
+        kid.rotation.y = -islandGroup.rotation.y + Math.sin(p * 0.36) * 0.24;
+        kid.position.y = 0.15 + Math.abs(Math.sin(p)) * 0.12;
+        if (u.walkX || u.walkZ) {
+          const travel = t * 0.29 + u.phase;
+          const offset = Math.sin(travel);
+          const stride = Math.sin(p * 1.45) * Math.abs(Math.cos(travel));
+          kid.position.x = u.x + u.walkX * offset;
+          kid.position.z = u.z + u.walkZ * offset;
+          const heading = Math.atan2(u.walkX, u.walkZ) + (Math.cos(travel) < 0 ? Math.PI : 0);
+          kid.rotation.y += Math.sin(heading - kid.rotation.y) * 0.85;
+          u.leftLeg.position.z = stride * 0.23;
+          u.rightLeg.position.z = -stride * 0.23;
+          u.leftLeg.position.y = Math.max(0, stride) * 0.16;
+          u.rightLeg.position.y = Math.max(0, -stride) * 0.16;
+          u.leftArmPivot.rotation.x = -stride * 0.45;
+          u.rightArmPivot.rotation.x = stride * 0.45;
+        }
         u.headGroup.rotation.z = Math.sin(p * 0.7) * 0.12;
         u.headGroup.rotation.y = Math.cos(p * 0.5) * 0.18;
         u.leftArmPivot.rotation.z = 0.45 + Math.sin(p * 1.5) * 0.35;
@@ -1943,7 +2097,6 @@
       animateIslandGorilla(performance.now() / 1000);
       animateIslandEnvironment(performance.now() / 1000);
       animateIslandMonkey(performance.now() / 1000);
-      updateKidGreeting();
       animateRainbowCat(performance.now() / 1000);
       renderer.render(scene, camera);
     }
@@ -2519,4 +2672,3 @@
   </script>
 </body>
 </html>
-
