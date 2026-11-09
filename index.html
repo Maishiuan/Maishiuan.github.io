@@ -1716,6 +1716,7 @@
       const night=sceneTime==='night',rain=sceneWeather==='rain',cloudy=sceneWeather==='cloudy';
       const sky=night?(rain?0x1d293c:0x162b4c):(rain?0xa7b9cb:cloudy?0xc2d3e2:0xdbeafe);
       scene.background.setHex(sky);scene.fog.color.setHex(sky);document.body.dataset.islandTime=sceneTime;
+      colorOcean(night, rain, cloudy, sky);
       environmentLights.hemi.intensity=night?0.6:rain?0.72:0.88;
       environmentLights.sun.intensity=night?0.35:rain?0.55:cloudy?0.8:1.15;
       environmentLights.fill.intensity=night?0.5:0.4;
@@ -1753,6 +1754,227 @@
       });
     }
 
+    const oceanLevel = -15.5;
+    const whaleJump = { duration: 6.4, interval: 21, span: 24.5, z: -5, base: -21, lift: 156 };
+    let oceanSurface, oceanWhale, oceanStart, whaleSplashes;
+    const reduceOceanMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    function setupOcean() {
+      oceanStart = performance.now() / 1000;
+      const material = new THREE.ShaderMaterial({
+        uniforms: {
+          time: { value: 0 },
+          deep: { value: new THREE.Color() },
+          shallow: { value: new THREE.Color() },
+          glint: { value: new THREE.Color() },
+          horizon: { value: new THREE.Color() }
+        },
+        vertexShader: `
+          varying vec3 surface;
+          void main() {
+            vec4 point = modelMatrix * vec4(position, 1.0);
+            surface = point.xyz;
+            gl_Position = projectionMatrix * viewMatrix * point;
+          }
+        `,
+        fragmentShader: `
+          uniform float time;
+          uniform vec3 deep, shallow, glint, horizon;
+          varying vec3 surface;
+          void main() {
+            vec2 p = surface.xz;
+            float distanceToCamera = length(cameraPosition - surface);
+            float swell = sin(p.y * .29 + sin(p.x * .13) * .9 - time * .48);
+            float crossWave = sin(p.x * .2 + p.y * .15 + time * .31);
+            vec3 water = mix(deep, shallow, clamp(.43 + .21 * swell + .17 * crossWave, 0.0, 1.0));
+            float ridge = sin(p.y * 1.5 + sin(p.x * .44 + time * .24) * 1.1 - time * .85);
+            float broken = smoothstep(.13, .83, sin(p.x * .72 + p.y * .41 + time * .42));
+            float foam = smoothstep(.86, .995, ridge) * broken;
+            water = mix(water, glint, foam * .62 * (1.0 - smoothstep(55.0, 142.0, distanceToCamera)));
+            float shadow = 1.0 - smoothstep(.22, 1.0, length((p - vec2(1.8, -1.4)) / vec2(16.0, 12.0)));
+            water *= 1.0 - shadow * .24;
+            water = mix(water, horizon, smoothstep(45.0, 250.0, distanceToCamera));
+            gl_FragColor = vec4(water, 1.0);
+          }
+        `
+      });
+      oceanSurface = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), material);
+      oceanSurface.rotation.x = -Math.PI / 2;
+      oceanSurface.position.y = oceanLevel;
+      scene.add(oceanSurface);
+      oceanWhale = createOceanWhale();
+      oceanWhale.visible = false;
+      scene.add(oceanWhale);
+      whaleSplashes = [createWhaleSplash(-whaleJump.span), createWhaleSplash(whaleJump.span)];
+    }
+
+    function colorOcean(night, rain, cloudy, sky) {
+      const palette = night ? [0x163969, 0x28759b, 0x8bcced]
+        : rain ? [0x30638a, 0x5396ac, 0xc0dfec]
+        : cloudy ? [0x246c9d, 0x50b8c9, 0xc0edf0]
+        : [0x1479bb, 0x42cbd7, 0xd6faff];
+      const { deep, shallow, glint, horizon } = oceanSurface.material.uniforms;
+      deep.value.setHex(palette[0]);
+      shallow.value.setHex(palette[1]);
+      glint.value.setHex(palette[2]);
+      horizon.value.setHex(sky);
+    }
+
+    function createOceanWhale() {
+      const whale = new THREE.Group();
+      // Cross sections run from the slender tail stock to the rounded head.
+      const outline = [
+        [-4.7, .12], [-4.15, .34], [-3.4, .52], [-2.5, .81],
+        [-1.4, 1.18], [0, 1.53], [1.5, 1.66], [2.8, 1.45],
+        [3.65, 1.06], [4.05, .57], [4.19, .02]
+      ];
+      const curve = new THREE.SplineCurve(outline.map(([x, radius]) => new THREE.Vector2(radius, x)));
+      const profile = curve.getPoints(48);
+      const geometry = new THREE.LatheGeometry(profile, 40);
+      geometry.rotateZ(-Math.PI / 2);
+      geometry.scale(1, .9, 1);
+      const positions = geometry.attributes.position;
+      const colors = new Float32Array(positions.count * 3);
+      const blue = new THREE.Color(0x2166b5), side = new THREE.Color(0x389bcf);
+      const belly = new THREE.Color(0xd2f3ff), color = new THREE.Color();
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+        const angle = y / Math.max(.02, Math.hypot(y, z));
+        color.copy(side).lerp(blue, THREE.MathUtils.smoothstep(angle, -.16, .76));
+        color.lerp(belly, 1 - THREE.MathUtils.smoothstep(angle, -.57, -.31));
+        color.multiplyScalar(.97 + .035 * Math.sin(x * 2 + z * 2));
+        color.toArray(colors, i * 3);
+      }
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      whale.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .56 })));
+
+      const finMat = new THREE.MeshStandardMaterial({ color: 0x236bb1, roughness: .56 });
+      function makeFin(shape) {
+        const geo = new THREE.ExtrudeGeometry(shape, {
+          depth: .09, bevelEnabled: true, bevelThickness: .09, bevelSize: .11, bevelSegments: 3, steps: 1, curveSegments: 14
+        });
+        geo.translate(0, 0, -.045);
+        geo.rotateX(Math.PI / 2);
+        return new THREE.Mesh(geo, finMat);
+      }
+      const flukeShape = new THREE.Shape();
+      flukeShape.moveTo(.38, 0);
+      flukeShape.bezierCurveTo(.39, .7, -.22, 1.22, -.45, 2.14);
+      flukeShape.bezierCurveTo(-1.02, 1.98, -1.61, 1.16, -1.43, .57);
+      flukeShape.quadraticCurveTo(-1.32, .25, -.88, 0);
+      flukeShape.closePath();
+      const flipperShape = new THREE.Shape();
+      flipperShape.moveTo(.55, 0);
+      flipperShape.bezierCurveTo(.51, .85, -.57, 1.76, -1.62, 2.06);
+      flipperShape.bezierCurveTo(-2.14, 2.06, -1.54, 1.15, -.53, .02);
+      flipperShape.closePath();
+      const tail = new THREE.Group();
+      tail.position.set(-4.33, .01, 0);
+      whale.add(tail);
+      const flippers = [];
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x122446 });
+      const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const mouthMat = new THREE.MeshBasicMaterial({ color: 0x32688e });
+      for (const sign of [-1, 1]) {
+        const fluke = makeFin(flukeShape);
+        fluke.scale.z = sign;
+        tail.add(fluke);
+        const flipper = makeFin(flipperShape);
+        flipper.position.set(.78, -.49, sign * 1.16);
+        flipper.scale.z = sign;
+        whale.add(flipper);
+        flippers.push(flipper);
+
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(.18, 14, 10), eyeMat);
+        eye.scale.set(1, 1.15, .55);
+        eye.position.set(2.53, .25, sign * 1.48);
+        const shine = new THREE.Mesh(new THREE.SphereGeometry(.053, 9, 8), shineMat);
+        shine.position.set(2.57, .305, sign * 1.56);
+        whale.add(eye, shine);
+        const smile = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(2.66, -.32, sign * 1.43),
+          new THREE.Vector3(3.04, -.52, sign * 1.24),
+          new THREE.Vector3(3.59, -.49, sign * .96),
+          new THREE.Vector3(3.96, -.31, sign * .57)
+        ]);
+        whale.add(new THREE.Mesh(new THREE.TubeGeometry(smile, 16, .034, 6, false), mouthMat));
+      }
+      const dorsal = new THREE.Mesh(new THREE.SphereGeometry(.58, 18, 12), finMat);
+      dorsal.scale.set(1.35, 1.05, .37);
+      dorsal.rotation.z = .46;
+      dorsal.position.set(-1.7, 1.02, 0);
+      whale.add(dorsal);
+      whale.userData = { tail, flippers };
+      return whale;
+    }
+
+    function createWhaleSplash(x) {
+      const spray = new THREE.Group();
+      spray.position.set(x, oceanLevel + .065, whaleJump.z);
+      const rings = [0, 1].map(() => {
+        const ring = new THREE.Mesh(new THREE.RingGeometry(.89, 1, 48),
+          new THREE.MeshBasicMaterial({ color: 0xcaf4ff, transparent: true, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2;
+        spray.add(ring);
+        return ring;
+      });
+      const dropletGeo = new THREE.SphereGeometry(.14, 8, 6);
+      const dropletMat = new THREE.MeshBasicMaterial({ color: 0xddf8ff });
+      const drops = Array.from({ length: 20 }, (_, i) => {
+        const drop = new THREE.Mesh(dropletGeo, dropletMat);
+        const angle = i * 2.39996;
+        drop.userData = { x: Math.cos(angle), z: Math.sin(angle), speed: 2 + i % 5 * .62 };
+        spray.add(drop);
+        return drop;
+      });
+      spray.visible = false;
+      scene.add(spray);
+      return { spray, rings, drops };
+    }
+
+    function animateWhaleSplash(splash, age) {
+      splash.spray.visible = age >= 0 && age < 2.55;
+      if (!splash.spray.visible) return;
+      splash.rings.forEach((ring, i) => {
+        const t = age - i * .29;
+        ring.visible = t >= 0;
+        ring.scale.setScalar(.6 + Math.max(0, t) * 3.4);
+        ring.material.opacity = Math.max(0, .76 - t * .32);
+      });
+      for (const drop of splash.drops) {
+        const { x, z, speed } = drop.userData;
+        const height = age * (5.1 + speed * .6) - age * age * 6.7;
+        drop.visible = height >= 0;
+        drop.position.set(x * (.3 + age * speed), height, z * (.3 + age * speed));
+        drop.scale.set(.82, 1.6 - Math.min(age, 1) * .6, .82);
+      }
+    }
+
+    function animateOcean(seconds) {
+      if (reduceOceanMotion.matches) {
+        oceanWhale.visible = false;
+        whaleSplashes.forEach(({ spray }) => spray.visible = false);
+        return;
+      }
+      const elapsed = seconds - oceanStart;
+      oceanSurface.material.uniforms.time.value = elapsed;
+      const { duration, interval, span, z, base, lift } = whaleJump;
+      const phase = (elapsed + interval - 3) % interval;
+      const u = phase / duration;
+      oceanWhale.visible = u <= 1;
+      if (oceanWhale.visible) {
+        oceanWhale.position.set((2 * u - 1) * span, base + lift * u * (1 - u), z);
+        oceanWhale.rotation.z = Math.atan2(lift * (1 - 2 * u), 2 * span) * .86;
+        oceanWhale.rotation.x = Math.sin(u * Math.PI) * -.12;
+        const { tail, flippers } = oceanWhale.userData;
+        tail.rotation.z = Math.sin(u * Math.PI * 8) * .24;
+        flippers.forEach((fin, i) => fin.rotation.x = (i ? 1 : -1) * (.32 + Math.sin(u * 17) * .18));
+      }
+      animateWhaleSplash(whaleSplashes[0], phase - .10);
+      animateWhaleSplash(whaleSplashes[1], phase - duration + .31);
+    }
+
+
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
       const width = container.clientWidth;
@@ -1762,7 +1984,7 @@
       scene.background = new THREE.Color(0xdbeafe);
       scene.fog = new THREE.FogExp2(0xdbeafe, 0.009);
 
-      camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
       camera.position.set(0, 16.5, cameraDistance);
       camera.lookAt(0, 3.2, 0);
 
@@ -2033,6 +2255,7 @@
       islandMonkey=createIslandMonkey();
       islandMonkey.scale.setScalar(0.7);
       islandGroup.add(islandMonkey);
+      setupOcean();
       setupIslandEnvironment();
       rainbowCat = createRainbowCat();
       setupInteractionEvents(renderer.domElement);
@@ -2086,7 +2309,7 @@
       if (!width || !height) return;
       camera.aspect = width / height;
       const compact=window.matchMedia('(max-width:640px), (max-height:500px)').matches;
-      camera.fov=40;
+      camera.fov=compact?40:45;
       // Fit the entire island inside its own area, keeping both axes comfortably in frame.
       camera.zoom=compact?Math.min(0.8,camera.aspect*0.68):1;
       camera.updateProjectionMatrix();
@@ -2176,6 +2399,7 @@
       animateIslandEnvironment(performance.now() / 1000);
       animateIslandMonkey(performance.now() / 1000);
       animateRainbowCat(performance.now() / 1000);
+      animateOcean(performance.now() / 1000);
       renderer.render(scene, camera);
     }
 
