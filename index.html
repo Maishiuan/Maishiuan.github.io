@@ -693,8 +693,9 @@
         return;
       }
       try {
+        const authFragment = new URLSearchParams(location.hash.slice(1));
         cloudClient = supabase.createClient(config.url, config.publishableKey);
-        const setupToken = new URLSearchParams(location.hash.slice(1)).get('setup');
+        const setupToken = authFragment.get('setup');
         if (setupToken) {
           history.replaceState(null,'',location.pathname);
           const {error} = await cloudClient.auth.verifyOtp({token_hash:setupToken,type:'recovery'});
@@ -703,6 +704,16 @@
         }
         const {data, error} = await cloudClient.auth.getSession();
         if (error) throw error;
+        if (authFragment.get('type') === 'recovery' &&
+            data.session && data.session.access_token === authFragment.get('access_token')) {
+          history.replaceState(null, '', location.pathname);
+          showPasswordSetup(true);
+          return;
+        }
+        if (authFragment.has('error_code')) {
+          history.replaceState(null, '', location.pathname);
+          alert('密碼重設連結可能已過期或已使用，請從老師後台重新寄送。');
+        }
         if (data.session) {
           const result = await cloudClient.from('profiles').select('*').eq('id',data.session.user.id).single();
           if (!result.error && result.data.is_teacher) cloudProfile = result.data;
@@ -740,14 +751,38 @@
         <h2 class="font-bold text-lg">老師後台登入</h2><p class="text-xs text-slate-500">學生記錄心情不需要登入。老師登入後可查看歷史紀錄及悄悄話。</p>
         <input name="email" type="email" autocomplete="username" required placeholder="帳號電子郵件" class="w-full border rounded p-2">
         <input name="password" type="password" autocomplete="current-password" required placeholder="密碼" class="w-full border rounded p-2">
+        <button type="button" class="reset-login text-sm text-indigo-700 underline">忘記密碼？寄送重設連結</button>
+        <p class="text-xs text-slate-600" role="status"></p>
         <p class="text-xs text-red-600" role="alert"></p>
         <button class="bg-indigo-600 text-white rounded p-2 w-full">老師登入</button><button type="button" class="cancel-login bg-slate-100 rounded p-2 w-full">返回點名</button>
       </form>`;
       document.body.appendChild(box);
       box.querySelector('.cancel-login').onclick = () => box.remove();
+      const form = box.querySelector('form');
+      const resetButton = form.querySelector('.reset-login');
+      resetButton.onclick = async () => {
+        const email = form.elements.email;
+        if (!email.reportValidity()) return;
+        const status = form.querySelector('[role=status]');
+        const alert = form.querySelector('[role=alert]');
+        resetButton.disabled = true;
+        status.textContent = '';
+        alert.textContent = '';
+        try {
+          const {error} = await cloudClient.auth.resetPasswordForEmail(email.value.trim(), {
+            redirectTo: location.origin + location.pathname
+          });
+          if (error) throw error;
+          status.textContent = '若信箱可接收重設信，請到收件匣或垃圾郵件查看，並點信中的連結。';
+        } catch {
+          alert.textContent = '暫時無法寄送重設信，請確認信箱或稍後再試。';
+        } finally {
+          resetButton.disabled = false;
+        }
+      };
       box.querySelector('form').onsubmit = async event => {
         event.preventDefault();
-        const form = event.currentTarget, button = form.querySelector('button');
+        const form = event.currentTarget, button = event.submitter || form.querySelector('button:not([type])');
         button.disabled = true;
         try {
           const {error} = await cloudClient.auth.signInWithPassword({email:form.elements.email.value.trim(), password:form.elements.password.value});
@@ -757,10 +792,10 @@
       };
     }
 
-    function showPasswordSetup() {
+    function showPasswordSetup(recovery = false) {
       const box=document.createElement('div');
       box.className='fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
-      box.innerHTML=`<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h2 class="font-bold">設定你的登入密碼</h2><p class="text-xs">首次登入連結只能使用一次。請設定至少 12 個字元的密碼。</p><input name="password" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="新密碼"><input name="confirm" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="再次輸入密碼"><p role="alert" class="text-red-600 text-xs"></p><button class="bg-indigo-600 text-white p-2 rounded w-full">儲存密碼並登入</button></form>`;
+      box.innerHTML=`<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4"><h2 class="font-bold">${recovery ? '重設老師後台密碼' : '設定你的登入密碼'}</h2><p class="text-xs">請設定至少 12 個字元的新密碼。</p><input name="password" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="新密碼"><input name="confirm" type="password" autocomplete="new-password" minlength="12" required class="border rounded p-2 w-full" placeholder="再次輸入密碼"><p role="alert" class="text-red-600 text-xs"></p><button class="bg-indigo-600 text-white p-2 rounded w-full">儲存密碼並登入</button></form>`;
       document.body.appendChild(box);
       box.querySelector('form').onsubmit=async event=>{
         event.preventDefault(); const form=event.currentTarget;
