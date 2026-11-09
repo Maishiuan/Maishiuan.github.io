@@ -397,14 +397,14 @@
             <h2 class="text-lg font-black text-slate-800 title-font">全班情緒共鳴牆</h2>
             <span id="teacher-mode-badge" class="hidden bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">老師輔導視角 (可看悄悄話)</span>
           </div>
-          <p class="text-xs text-slate-500 mt-0.5">看見彼此的心情，給身邊的同學一句溫柔的鼓勵</p>
+          <p id="wall-access-hint" class="text-xs text-slate-500 mt-0.5">這裡顯示今天公開分享的心情（台灣時間）</p>
         </div>
 
         <div class="flex items-center gap-2">
           <button onclick="syncDataFromCloud(true)" class="bg-white hover:bg-slate-50 text-indigo-600 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold shadow-sm flex items-center gap-1 transition">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 刷新
           </button>
-          <input type="date" id="wall-date-filter" onchange="renderClassWall()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
+          <input type="date" id="wall-date-filter" aria-label="查詢紀錄日期" onchange="renderClassWall(); syncDataFromCloud(false)" class="hidden bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:outline-none">
           <button onclick="closeClassWallModal()" class="w-8 h-8 rounded-full bg-white/80 hover:bg-white flex items-center justify-center text-slate-500 shadow-sm transition">
             <i data-lucide="x" class="w-4 h-4"></i>
           </button>
@@ -728,6 +728,7 @@
         document.addEventListener('visibilitychange',()=> { if (!document.hidden) syncDataFromCloud(false); });
         // RLS may withhold events after a record becomes private; periodically reconcile visible data.
         setInterval(()=> { if (!document.hidden && navigator.onLine) syncDataFromCloud(false); },15000);
+        scheduleTaipeiDayRefresh();
       } catch (error) { setSyncStatusUI('error','登入或連線失敗'); alert(error.message); }
     }
 
@@ -736,7 +737,7 @@
       const box = document.createElement('div');
       box.className = 'fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-6';
       box.innerHTML = `<form class="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
-        <h2 class="font-bold text-lg">老師後台登入</h2><p class="text-xs text-slate-500">學生記錄心情不需要登入。老師登入後可查看私人紀錄。</p>
+        <h2 class="font-bold text-lg">老師後台登入</h2><p class="text-xs text-slate-500">學生記錄心情不需要登入。老師登入後可查看歷史紀錄及悄悄話。</p>
         <input name="email" type="email" autocomplete="username" required placeholder="帳號電子郵件" class="w-full border rounded p-2">
         <input name="password" type="password" autocomplete="current-password" required placeholder="密碼" class="w-full border rounded p-2">
         <p class="text-xs text-red-600" role="alert"></p>
@@ -799,12 +800,23 @@
         return;
       }
       const sequence = ++refreshSequence;
+      const today = getTodayDateStr();
+      const wallOpen = !document.getElementById('class-wall-modal').classList.contains('hidden');
+      const selected = wallOpen ? getWallRecordDate() : today;
+      if (!cloudProfile?.is_teacher && classRecords.some(record => record.date !== today)) {
+        classRecords = classRecords.filter(record => record.date === today);
+        updateClassBadgeCount(); updateTreeGemColor(); updateCurrentUserUI();
+        if (wallOpen) renderClassWall();
+        if (!document.getElementById('student-select-modal').classList.contains('hidden')) renderStudentGrid();
+      }
       setSyncStatusUI('syncing','正在讀取雲端資料...');
       try {
-        const {data,error} = await cloudClient.from('emotion_records').select('*').order('record_date',{ascending:false}).limit(1000);
+        const dates = selected === today ? [today] : [today, selected];
+        const {data,error} = await cloudClient.from('emotion_records').select('*').in('record_date', dates);
         if (error) throw error;
         if (sequence !== refreshSequence) return;
-        classRecords = data.map(row=>({...row.payload,studentId:row.student_id,date:row.record_date,isPublic:row.is_public,likes:row.likes,intensity:Math.max(1,Math.min(5,Number(row.payload.intensity)||3)),reasons:Array.isArray(row.payload.reasons)?row.payload.reasons:[]}));
+        const visibleRows = cloudProfile?.is_teacher ? data : data.filter(row => row.record_date === getTodayDateStr());
+        classRecords = visibleRows.map(row=>({...row.payload,studentId:row.student_id,date:row.record_date,isPublic:row.is_public,likes:row.likes,intensity:Math.max(1,Math.min(5,Number(row.payload.intensity)||3)),reasons:Array.isArray(row.payload.reasons)?row.payload.reasons:[]}));
         updateClassBadgeCount(); updateTreeGemColor(); updateCurrentUserUI();
         if (!document.getElementById('student-select-modal').classList.contains('hidden')) renderStudentGrid();
         if (!document.getElementById('class-wall-modal').classList.contains('hidden')) renderClassWall();
@@ -2134,13 +2146,15 @@
 
     function updateTreeGemColor() {
       if (!treeGem) return;
-      if (classRecords.length === 0) {
+      const today = getTodayDateStr();
+      const todayRecords = classRecords.filter(record => record.date === today);
+      if (todayRecords.length === 0) {
         treeGem.material.color.setHex(0x818cf8);
         treeGem.material.emissive.setHex(0x6366f1);
         return;
       }
       const counts = { positive: 0, sensitive: 0, peace: 0 };
-      classRecords.forEach(r => {
+      todayRecords.forEach(r => {
         recordEmotions(r).forEach(item=>{const def=EMOTION_DEFINITIONS.find(d=>d.id===item.id);if(def)counts[def.category]=(counts[def.category]||0)+1;});
       });
       if (counts.positive >= counts.sensitive) {
@@ -2170,8 +2184,15 @@
     }
 
     function getTodayDateStr() {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return islandQuoteForDate().date;
+    }
+
+    function scheduleTaipeiDayRefresh() {
+      const midnight = Date.parse(getTodayDateStr() + 'T00:00:00+08:00') + 86400000;
+      setTimeout(() => {
+        syncDataFromCloud(false);
+        scheduleTaipeiDayRefresh();
+      }, Math.max(1, midnight - Date.now()));
     }
 
     function handleStartCheckInClick() {
@@ -2466,27 +2487,36 @@
       document.getElementById('class-wall-modal').classList.add('hidden');
     }
 
+    function getWallRecordDate() {
+      const today = getTodayDateStr();
+      return cloudProfile?.is_teacher ? document.getElementById('wall-date-filter').value || today : today;
+    }
+
     function renderClassWall() {
       const container = document.getElementById('class-cards-container');
-      const selectedDate = document.getElementById('wall-date-filter').value || getTodayDateStr();
+      const selectedDate = getWallRecordDate();
       container.innerHTML = '';
 
       const isTeacher = !!cloudProfile?.is_teacher;
       const teacherBadge = document.getElementById('teacher-mode-badge');
+      document.getElementById('wall-date-filter').classList.toggle('hidden', !isTeacher);
+      document.getElementById('wall-access-hint').textContent = isTeacher
+        ? '可依日期查詢班級紀錄，包含悄悄話'
+        : '這裡顯示今天公開分享的心情（台灣時間）';
       if (isTeacher) {
         teacherBadge.classList.remove('hidden');
       } else {
         teacherBadge.classList.add('hidden');
       }
 
-      const dayRecords = classRecords.filter(r => r.date === selectedDate);
+      const dayRecords = classRecords.filter(r => r.date === selectedDate && (isTeacher || r.isPublic));
 
       if (dayRecords.length === 0) {
         container.innerHTML = `
           <div class="col-span-full py-12 text-center text-slate-400">
             <span class="text-4xl block mb-2">🏖️</span>
             <p class="text-sm font-bold">(${selectedDate}) 這天還沒有同學簽到喔！</p>
-            <p class="text-xs mt-1">切換上方日期或點擊簽到記錄吧～</p>
+            <p class="text-xs mt-1">${isTeacher ? '可以切換上方日期查詢。' : '今天的公開心情會顯示在這裡。'}</p>
           </div>
         `;
         return;
@@ -2660,7 +2690,7 @@
       return output;
     }
     async function exportClassRecordsSummary() {
-      const date=document.getElementById('wall-date-filter').value||getTodayDateStr();
+      const date=getWallRecordDate();
       const trigger=document.getElementById('export-summary-btn');
       if(trigger.disabled)return;
       trigger.disabled=true;trigger.setAttribute('aria-busy','true');
