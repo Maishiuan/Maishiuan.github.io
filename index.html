@@ -172,6 +172,7 @@
       <label class="text-sm font-bold">髮型
         <select id="avatar-hair" class="mt-1">
           <option value="short">短瀏海</option><option value="bun">丸子頭</option><option value="twintails">雙馬尾</option><option value="bob">齊耳短髮</option>
+          <option value="swept">側分瀏海</option><option value="curly">蓬鬆捲髮</option><option value="pony">高馬尾</option><option value="long">及肩長髮</option>
         </select>
       </label>
       <label class="text-sm font-bold">服裝
@@ -180,11 +181,17 @@
         </select>
       </label>
     </div>
-    <label class="mt-2 block text-sm font-bold">服裝顏色
+    <div class="mt-2 grid grid-cols-2 gap-2">
+    <label class="text-sm font-bold">髮色
+      <input id="avatar-hair-color" type="color" class="mt-1 block h-10 w-full cursor-pointer rounded-xl border border-slate-300 bg-slate-50 px-2 py-1">
+    </label>
+    <label class="text-sm font-bold">服裝顏色
       <select id="avatar-color" class="mt-1">
         <option value="mint">薄荷綠</option><option value="sky">天空藍</option><option value="lavender">薰衣草紫</option><option value="peach">蜜桃粉</option><option value="sun">陽光黃</option><option value="orange">橘子橙</option>
+        <option value="black">黑色</option><option value="white">白色</option><option value="navy">深藍</option><option value="red">莓果紅</option><option value="sage">鼠尾草綠</option><option value="gray">霧灰</option>
       </select>
     </label>
+    </div>
     <p id="avatar-save-status" class="mt-2 text-xs text-slate-600" role="status">換裝會自動記在這個瀏覽器。</p>
   </dialog>
 
@@ -1225,12 +1232,14 @@
       hairCap.position.y = 0.03;
       headGroup.add(hairCap);
 
+      const bangs = new THREE.Group();
       for (let b = -1; b <= 1; b++) {
         const bang = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 16), hairMat);
         bang.scale.set(1.2, 0.85, 0.7);
         bang.position.set(b * 0.2, 0.26, 0.45);
-        headGroup.add(bang);
+        bangs.add(bang);
       }
+      headGroup.add(bangs);
 
       const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), hairMat);
       bun.position.set(0, 0.62, -0.08);
@@ -1246,7 +1255,30 @@
         lock.position.set(side * 0.44, -0.11, -0.1);
         bob.add(lock);
       }
-      headGroup.add(bun, twintails, bob);
+      const swept = new THREE.Group(), curly = new THREE.Group();
+      const pony = new THREE.Group(), long = new THREE.Group();
+      const lockGeometry = new THREE.SphereGeometry(1, 16, 12);
+      function addLock(style, position, scale, angle = 0) {
+        const lock = new THREE.Mesh(lockGeometry, hairMat);
+        lock.position.set(...position);
+        lock.scale.set(...scale);
+        lock.rotation.z = angle;
+        style.add(lock);
+      }
+      addLock(swept, [-.12, .34, .43], [.36, .13, .18], .36);
+      addLock(swept, [-.38, .17, .32], [.15, .22, .16], -.35);
+      for (let i = 0; i < 7; i++) {
+        const angle = i * Math.PI * 2 / 7;
+        addLock(curly, [Math.cos(angle) * .37, .41, Math.sin(angle) * .36], [.21, .22, .21]);
+      }
+      addLock(curly, [0, .57, 0], [.25, .19, .25]);
+      addLock(pony, [.15, .49, -.44], [.21, .21, .22]);
+      addLock(pony, [.28, .15, -.56], [.21, .40, .22], .31);
+      addLock(long, [0, -.08, -.35], [.51, .58, .26]);
+      for (const side of [-1, 1]) {
+        addLock(long, [side * .46, -.20, -.08], [.19, .45, .29], side * .13);
+      }
+      headGroup.add(bun, twintails, bob, swept, curly, pony, long);
 
       kid.add(headGroup);
 
@@ -1274,7 +1306,8 @@
         rightLeg,
         phase: config.phase,
         seated: config.seated,
-        hairPieces: { bun, twintails, bob },
+        hairPieces: { bun, twintails, bob, swept, curly, pony, long },
+        hairMat, bangs,
         bodyCone, skirtHem, overalls, dressMat
       };
 
@@ -1488,11 +1521,13 @@
       data.tail.rotation.y=Math.sin(seconds*4)*0.25;data.tail.rotation.x=Math.sin(stride)*0.09;
       data.head.rotation.z=Math.sin(seconds*2.2)*0.065;data.head.rotation.x=-hop*0.07;
     }
-    const avatarHairStyles = ['short', 'bun', 'twintails', 'bob'];
+    const avatarHairStyles = ['short', 'bun', 'twintails', 'bob', 'swept', 'curly', 'pony', 'long'];
     const avatarOutfits = ['tee', 'dress', 'overalls'];
     const avatarColors = {
       mint: 0x34d399, sky: 0x38bdf8, lavender: 0xa855f7,
-      peach: 0xf472b6, sun: 0xfacc15, orange: 0xf97316
+      peach: 0xf472b6, sun: 0xfacc15, orange: 0xf97316,
+      black: 0x161822, white: 0xfafafa, navy: 0x253b70,
+      red: 0xc73557, sage: 0x84a98c, gray: 0x9297a7
     };
     const avatarStorageKey = 'emotion_island_avatar_looks';
     let avatarLooks = {};
@@ -1505,14 +1540,18 @@
       const saved = avatarLooks[id];
       return {
         hair: avatarHairStyles.includes(saved?.hair) ? saved.hair : defaults.hair,
+        hairColor: typeof saved?.hairColor === 'string' && /^#[0-9a-f]{6}$/i.test(saved.hairColor)
+          ? saved.hairColor : defaults.hairColor,
         outfit: avatarOutfits.includes(saved?.outfit) ? saved.outfit : defaults.outfit,
         color: Object.hasOwn(avatarColors, saved?.color) ? saved.color : defaults.color
       };
     }
 
     function applyAvatarLook(kid) {
-      const { hairPieces, bodyCone, skirtHem, overalls, dressMat, look } = kid.userData;
+      const { hairPieces, hairMat, bangs, bodyCone, skirtHem, overalls, dressMat, look } = kid.userData;
       for (const [style, piece] of Object.entries(hairPieces)) piece.visible = style === look.hair;
+      bangs.visible = look.hair !== 'swept' && look.hair !== 'curly';
+      hairMat.color.set(look.hairColor);
       const hasSkirt = look.outfit === 'dress';
       bodyCone.scale.set(hasSkirt ? 1 : 0.74, hasSkirt ? 1 : 0.82, hasSkirt ? 1 : 0.74);
       bodyCone.position.y = hasSkirt ? 0.65 : 0.71;
@@ -1587,6 +1626,7 @@
       const launch = document.getElementById('avatar-launch');
       const fields = {
         hair: document.getElementById('avatar-hair'),
+        hairColor: document.getElementById('avatar-hair-color'),
         outfit: document.getElementById('avatar-outfit'),
         color: document.getElementById('avatar-color')
       };
@@ -1624,6 +1664,7 @@
       kid.userData.lastGreeting = index;
       document.getElementById('avatar-student').value = student.id;
       document.getElementById('avatar-hair').value = look.hair;
+      document.getElementById('avatar-hair-color').value = look.hairColor;
       document.getElementById('avatar-outfit').value = look.outfit;
       document.getElementById('avatar-color').value = look.color;
       document.getElementById('avatar-greeting').textContent = kidGreetings[index];
@@ -1777,7 +1818,7 @@
     const whaleJump = { duration: 6.4, interval: 21, span: 24.5, z: -6, base: -22, lift: 157 };
     let oceanSurface, oceanWhale, oceanStart, whaleSplashes;
     const oceanBoats = [];
-    let lighthouseLantern;
+    let lighthouseLantern, cruiseShip;
     const reduceOceanMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     function setupOcean() {
@@ -1829,6 +1870,9 @@
       scene.add(oceanWhale);
       whaleSplashes = [createWhaleSplash(-whaleJump.span), createWhaleSplash(whaleJump.span)];
       addOceanDecorations();
+      cruiseShip = createCruiseShip();
+      cruiseShip.position.set(-25, oceanLevel, -8);
+      scene.add(cruiseShip);
     }
 
     function colorOcean(night, rain, cloudy, sky) {
@@ -1917,6 +1961,56 @@
       }
       addLevel(.04, .73, .63, 5.38, coral);
       scene.add(lighthouse);
+    }
+
+    function createCruiseShip() {
+      const ship = new THREE.Group();
+      const navy = new THREE.MeshStandardMaterial({ color: 0x254b79, roughness: .65 });
+      const white = new THREE.MeshStandardMaterial({ color: 0xfff7e9, roughness: .6 });
+      const red = new THREE.MeshStandardMaterial({ color: 0xe56b62, roughness: .64 });
+      const glass = new THREE.MeshStandardMaterial({
+        color: 0x507e9e, emissive: 0x79562a, emissiveIntensity: .32, roughness: .54
+      });
+      const hull = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), navy);
+      hull.position.y = .24;
+      hull.scale.set(4.2, .67, 1.02);
+      ship.add(hull);
+      function addDeck(width, height, depth, x, y, material) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+        mesh.position.set(x, y, 0);
+        ship.add(mesh);
+      }
+      addDeck(6.8, .20, 1.52, -.12, .71, red);
+      addDeck(6.2, .64, 1.58, -.25, 1.08, white);
+      addDeck(4.6, .57, 1.37, -.42, 1.68, white);
+      addDeck(2.95, .43, 1.13, -.30, 2.16, white);
+      const pane = new THREE.BoxGeometry(.29, .19, .06);
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 10; i++) {
+          const window = new THREE.Mesh(pane, glass);
+          window.position.set(-2.87 + i * .56, 1.14, side * .797);
+          ship.add(window);
+        }
+        for (let i = 0; i < 7; i++) {
+          const window = new THREE.Mesh(pane, glass);
+          window.position.set(-2.23 + i * .57, 1.70, side * .693);
+          ship.add(window);
+        }
+      }
+      const funnel = new THREE.Mesh(new THREE.CylinderGeometry(.22, .30, .67, 14), red);
+      funnel.position.set(-.95, 2.66, 0);
+      ship.add(funnel);
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(.23, .23, .12, 14), navy);
+      rim.position.set(-.95, 3, 0);
+      ship.add(rim);
+      const foam = new THREE.MeshBasicMaterial({ color: 0xc1efff, transparent: true, opacity: .58, depthWrite: false });
+      for (const side of [-1, 1]) {
+        const wake = new THREE.Mesh(new THREE.PlaneGeometry(3.6, .15), foam);
+        wake.rotation.set(-Math.PI / 2, 0, side * .20);
+        wake.position.set(-5.15, .08, side * .83);
+        ship.add(wake);
+      }
+      return ship;
     }
 
     function createOceanWhale() {
@@ -2072,6 +2166,7 @@
       }
       const elapsed = seconds - oceanStart;
       oceanSurface.material.uniforms.time.value = elapsed;
+      cruiseShip.position.x = (40 + elapsed * 2.1) % 130 - 65;
       oceanBoats.forEach((boat, index) => {
         const wave = elapsed * 1.35 + index * 2.3;
         boat.position.y = oceanLevel + .29 + Math.sin(wave) * .15;
@@ -2311,20 +2406,23 @@
         // Teachers sit in a shallow arc around the front of the tree.
         [-1.9, 2.55], [0, 3.6], [2.15, 2.9]
       ];
-      const hairColors = [0x451a03, 0x1e1b4b, 0x78350f, 0x3b0764];
+      const hairColors = ['#451a03', '#1e1b4b', '#78350f', '#3b0764'];
+      const initialOutfitColors = ['mint', 'sky', 'lavender', 'peach', 'sun', 'orange'];
       students.forEach((student, index) => {
         const [x, z, walkX = 0, walkZ = 0] = avatarSpots[index % avatarSpots.length];
         const seated = student.group === '老師';
+        const hairColor = hairColors[index % hairColors.length];
         const kid = createCuteKid({
           shirtColor: avatarColors.mint,
-          hairColor: hairColors[index % hairColors.length],
+          hairColor,
           phase: index * 0.8,
           seated
         });
         const defaults = {
-          hair: avatarHairStyles[index % avatarHairStyles.length],
+          hair: avatarHairStyles[index % 4],
+          hairColor,
           outfit: avatarOutfits[index % avatarOutfits.length],
-          color: Object.keys(avatarColors)[index % Object.keys(avatarColors).length]
+          color: initialOutfitColors[index % initialOutfitColors.length]
         };
         Object.assign(kid.userData, { student, x, z, walkX, walkZ, look: getAvatarLook(student.id, defaults) });
         applyAvatarLook(kid);
