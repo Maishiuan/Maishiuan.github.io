@@ -173,11 +173,13 @@
         <select id="avatar-hair" class="mt-1">
           <option value="short">短瀏海</option><option value="bun">丸子頭</option><option value="twintails">雙馬尾</option><option value="bob">齊耳短髮</option>
           <option value="swept">側分瀏海</option><option value="curly">蓬鬆捲髮</option><option value="pony">高馬尾</option><option value="long">及肩長髮</option>
+          <option value="braids">雙辮子</option>
         </select>
       </label>
       <label class="text-sm font-bold">服裝
         <select id="avatar-outfit" class="mt-1">
           <option value="tee">休閒 T 恤</option><option value="dress">圓領洋裝</option><option value="overalls">吊帶褲</option>
+          <option value="hoodie">連帽上衣</option><option value="jacket">運動外套</option><option value="sailor">水手服</option>
         </select>
       </label>
     </div>
@@ -1158,6 +1160,38 @@
       collar.rotation.x = Math.PI / 2;
       collar.position.y = 1.06;
       torsoGroup.add(collar);
+      const hoodie = new THREE.Group();
+      const jacket = new THREE.Group();
+      const sailor = new THREE.Group();
+      const outfitDetails = { hoodie, jacket, sailor };
+      const trim = new THREE.MeshStandardMaterial({ color: 0xf8f2de, roughness: .62 });
+      function clothingPiece(group, geometry, material, x, y, z) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(x, y, z);
+        group.add(mesh);
+        return mesh;
+      }
+      const hood = clothingPiece(hoodie, new THREE.SphereGeometry(.32, 16, 12), dressMat, 0, 1.04, -.23);
+      hood.scale.set(1.15, .68, 1);
+      clothingPiece(hoodie, new THREE.BoxGeometry(.36, .15, .105), dressMat, 0, .52, .32);
+      for (const side of [-1, 1]) {
+        const cord = clothingPiece(hoodie, new THREE.BoxGeometry(.029, .22, .035), trim, side * .09, .88, .33);
+        cord.rotation.z = side * .16;
+        const cuff = clothingPiece(jacket, new THREE.BoxGeometry(.14, .085, .105), trim, side * .17, .43, .29);
+        cuff.rotation.z = side * .12;
+        const collarStrip = clothingPiece(sailor, new THREE.BoxGeometry(.075, .31, .08), trim, side * .103, .91, .277);
+        collarStrip.rotation.z = side * -.70;
+      }
+      clothingPiece(jacket, new THREE.BoxGeometry(.038, .55, .08), trim, 0, .71, .322);
+      clothingPiece(jacket, new THREE.BoxGeometry(.091, .075, .08), buckleMat, 0, .925, .358);
+      const necktie = new THREE.MeshStandardMaterial({ color: 0xe95068, roughness: .61 });
+      const tie = clothingPiece(sailor, new THREE.BoxGeometry(.098, .20, .075), necktie, 0, .717, .34);
+      tie.rotation.z = -.15;
+      clothingPiece(sailor, new THREE.SphereGeometry(.066, 10, 8), necktie, 0, .817, .357);
+      for (const detail of Object.values(outfitDetails)) {
+        detail.visible = false;
+        torsoGroup.add(detail);
+      }
       kid.add(torsoGroup);
 
       const leftArmPivot = new THREE.Group();
@@ -1256,7 +1290,7 @@
         bob.add(lock);
       }
       const swept = new THREE.Group(), curly = new THREE.Group();
-      const pony = new THREE.Group(), long = new THREE.Group();
+      const pony = new THREE.Group(), long = new THREE.Group(), braids = new THREE.Group();
       const lockGeometry = new THREE.SphereGeometry(1, 16, 12);
       function addLock(style, position, scale, angle = 0) {
         const lock = new THREE.Mesh(lockGeometry, hairMat);
@@ -1277,8 +1311,20 @@
       addLock(long, [0, -.08, -.35], [.51, .58, .26]);
       for (const side of [-1, 1]) {
         addLock(long, [side * .46, -.20, -.08], [.19, .45, .29], side * .13);
+        addLock(braids, [side * .45, .14, .02], [.16, .19, .17]);
+        for (let link = 0; link < 6; link++) {
+          const offset = link % 2 ? -.038 : .038;
+          const width = .132 - link * .009;
+          addLock(braids, [side * (.51 + link * .018 + offset), .05 - link * .114, .09 + link * .024],
+            [width, .118, width * .82], (link % 2 ? 1 : -1) * .52);
+        }
+        const ribbon = new THREE.Mesh(new THREE.SphereGeometry(.091, 12, 8), buckleMat);
+        ribbon.scale.set(1.14, .44, .88);
+        ribbon.position.set(side * .61, -.54, .22);
+        braids.add(ribbon);
+        addLock(braids, [side * .62, -.64, .23], [.072, .105, .066], side * .18);
       }
-      headGroup.add(bun, twintails, bob, swept, curly, pony, long);
+      headGroup.add(bun, twintails, bob, swept, curly, pony, long, braids);
 
       kid.add(headGroup);
 
@@ -1306,9 +1352,9 @@
         rightLeg,
         phase: config.phase,
         seated: config.seated,
-        hairPieces: { bun, twintails, bob, swept, curly, pony, long },
+        hairPieces: { bun, twintails, bob, swept, curly, pony, long, braids },
         hairMat, bangs,
-        bodyCone, skirtHem, overalls, dressMat
+        bodyCone, skirtHem, overalls, dressMat, outfitDetails
       };
 
       return kid;
@@ -1521,8 +1567,8 @@
       data.tail.rotation.y=Math.sin(seconds*4)*0.25;data.tail.rotation.x=Math.sin(stride)*0.09;
       data.head.rotation.z=Math.sin(seconds*2.2)*0.065;data.head.rotation.x=-hop*0.07;
     }
-    const avatarHairStyles = ['short', 'bun', 'twintails', 'bob', 'swept', 'curly', 'pony', 'long'];
-    const avatarOutfits = ['tee', 'dress', 'overalls'];
+    const avatarHairStyles = ['short', 'bun', 'twintails', 'bob', 'swept', 'curly', 'pony', 'long', 'braids'];
+    const avatarOutfits = ['tee', 'dress', 'overalls', 'hoodie', 'jacket', 'sailor'];
     const avatarColors = {
       mint: 0x34d399, sky: 0x38bdf8, lavender: 0xa855f7,
       peach: 0xf472b6, sun: 0xfacc15, orange: 0xf97316,
@@ -1548,7 +1594,7 @@
     }
 
     function applyAvatarLook(kid) {
-      const { hairPieces, hairMat, bangs, bodyCone, skirtHem, overalls, dressMat, look } = kid.userData;
+      const { hairPieces, hairMat, bangs, bodyCone, skirtHem, overalls, dressMat, outfitDetails, look } = kid.userData;
       for (const [style, piece] of Object.entries(hairPieces)) piece.visible = style === look.hair;
       bangs.visible = look.hair !== 'swept' && look.hair !== 'curly';
       hairMat.color.set(look.hairColor);
@@ -1557,6 +1603,7 @@
       bodyCone.position.y = hasSkirt ? 0.65 : 0.71;
       skirtHem.visible = hasSkirt;
       overalls.visible = look.outfit === 'overalls';
+      for (const [outfit, detail] of Object.entries(outfitDetails)) detail.visible = look.outfit === outfit;
       dressMat.color.setHex(avatarColors[look.color]);
     }
 
@@ -2556,7 +2603,7 @@
         const defaults = {
           hair: avatarHairStyles[index % 4],
           hairColor,
-          outfit: avatarOutfits[index % avatarOutfits.length],
+          outfit: avatarOutfits[index % 3],
           color: initialOutfitColors[index % initialOutfitColors.length]
         };
         Object.assign(kid.userData, { student, x, z, walkX, walkZ, look: getAvatarLook(student.id, defaults) });
