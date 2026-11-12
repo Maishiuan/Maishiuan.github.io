@@ -1066,7 +1066,7 @@
     /* ==========================================================
        4. 精緻圓潤黏土風 3D 浮空島嶼（動森級 Q版小人、立體柴犬、豐盛大樹）
        ========================================================== */
-    let scene, camera, renderer, islandGroup, treeGem, gemHalo;
+    let scene, camera, renderer, islandGroup, treeGem, gemHalo, littlePrince, islandFox;
     let kidsGroup = [];
     let shibaDog = null;
     let cloudsGroup = [];
@@ -2190,6 +2190,139 @@
     }
 
 
+    function decorateB612(planet) {
+      const soil = new THREE.MeshStandardMaterial({ color: 0xb7a4b1, roughness: .94 });
+      for (const [x, y, z, size] of [[.63,.38,.68,.27],[-.62,.12,.82,.32],[-.35,-.53,.82,.19],[.48,-.64,.74,.23],[.73,.27,-.68,.22],[-.55,-.23,-.83,.29]]) {
+        const crater = new THREE.Mesh(new THREE.SphereGeometry(size, 14, 10), soil);
+        crater.scale.set(1, 1, .25);
+        crater.position.set(x, y, z).normalize().multiplyScalar(1.115);
+        crater.lookAt(crater.position.clone().multiplyScalar(2));
+        planet.add(crater);
+      }
+      const rose = new THREE.Group();
+      rose.position.set(.19, 1.1, 0);
+      const green = new THREE.MeshStandardMaterial({ color: 0x3d9463, roughness: .77 });
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(.038,.053,.91,10), green);
+      stem.position.set(.05,.44,0);
+      stem.rotation.z = -.11;
+      rose.add(stem);
+      for (const side of [-1,1]) {
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(.20, 14, 10), green);
+        leaf.position.set(.05 + side*.16, side > 0 ? .52 : .35, 0);
+        leaf.scale.set(1.13,.33,.62);
+        leaf.rotation.z = side*.38;
+        rose.add(leaf);
+      }
+      const petalGeometry = new THREE.SphereGeometry(1, 16, 12);
+      const petalColors = [0xc72d60,0xf45779,0xff7e93].map(color => new THREE.MeshStandardMaterial({color,roughness:.65}));
+      for (let layer = 0; layer < petalColors.length; layer++) {
+        const count = 6 - layer;
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count + layer*.08) * Math.PI*2;
+          const radius = .22 - layer*.075;
+          const petal = new THREE.Mesh(petalGeometry, petalColors[layer]);
+          petal.position.set(.10 + Math.cos(angle)*radius, .88 + layer*.075, Math.sin(angle)*radius);
+          petal.scale.set(.16 - layer*.021,.20 - layer*.025,.095);
+          petal.rotation.y = -angle + Math.PI/2;
+          petal.rotation.z = .28;
+          rose.add(petal);
+        }
+      }
+      planet.add(rose);
+    }
+
+    function addIslandTravelers() {
+      littlePrince = createCuteKid({ shirtColor: 0x90c982, hairColor: 0xf5cf58, phase: 0, seated: false });
+      const kid = littlePrince.userData;
+      for (const piece of Object.values(kid.hairPieces)) piece.visible = piece === kid.hairPieces.swept;
+      kid.bangs.visible = false;
+      kid.bodyCone.scale.set(.76,.84,.76);
+      kid.skirtHem.visible = kid.overalls.visible = false;
+      const gold = new THREE.MeshStandardMaterial({ color: 0xffc44b, roughness: .7, side: THREE.DoubleSide });
+      const scarf = new THREE.Mesh(new THREE.TorusGeometry(.29,.085,10,24), gold);
+      scarf.rotation.x = Math.PI/2;
+      scarf.position.y = 1.10;
+      const ribbonShape = new THREE.Shape();
+      ribbonShape.moveTo(0,.09);
+      ribbonShape.bezierCurveTo(-.46,.28,-1.02,-.06,-1.52,.25);
+      ribbonShape.lineTo(-1.34,.00);
+      ribbonShape.lineTo(-1.55,-.02);
+      ribbonShape.bezierCurveTo(-.91,-.32,-.41,.03,0,-.10);
+      ribbonShape.closePath();
+      const ribbon = new THREE.Mesh(new THREE.ShapeGeometry(ribbonShape,16), gold);
+      ribbon.position.set(-.22,1.12,-.12);
+      littlePrince.add(scarf,ribbon);
+      kid.ribbon = ribbon;
+      littlePrince.scale.setScalar(1.15);
+      islandGroup.add(littlePrince);
+
+      islandFox = new THREE.Group();
+      const orange = new THREE.MeshStandardMaterial({ color: 0xeb762b, roughness:.74 });
+      const cream = new THREE.MeshStandardMaterial({ color: 0xffeacb, roughness:.77 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x482d31, roughness:.6 });
+      const shape = new THREE.SphereGeometry(1,18,14);
+      function foxPart(parent, material, position, scale) {
+        const mesh = new THREE.Mesh(shape,material);
+        mesh.position.set(...position);
+        mesh.scale.set(...scale);
+        parent.add(mesh);
+        return mesh;
+      }
+      foxPart(islandFox,orange,[0,.54,-.12],[.31,.34,.63]);
+      foxPart(islandFox,cream,[0,.52,.30],[.25,.29,.28]);
+      foxPart(islandFox,orange,[0,.87,.44],[.35,.32,.34]);
+      foxPart(islandFox,cream,[0,.78,.66],[.23,.14,.28]);
+      foxPart(islandFox,dark,[0,.80,.92],[.075,.054,.058]);
+      const earShape = new THREE.ConeGeometry(.14,.47,14);
+      for (const side of [-1,1]) {
+        const ear = new THREE.Mesh(earShape,orange);
+        ear.position.set(side*.23,1.19,.44);
+        ear.rotation.z = -side*.24;
+        islandFox.add(ear);
+        foxPart(islandFox,cream,[side*.24,1.20,.52],[.069,.153,.035]).rotation.z = -side*.24;
+        foxPart(islandFox,dark,[side*.19,.93,.71],[.053,.061,.038]);
+      }
+      const tail = new THREE.Group();
+      tail.position.set(0,.56,-.61);
+      foxPart(tail,orange,[0,.11,-.43],[.25,.24,.57]).rotation.x = .32;
+      foxPart(tail,cream,[0,.25,-.82],[.16,.16,.23]).rotation.x = .34;
+      islandFox.add(tail);
+      const paws = [];
+      for (const x of [-.18,.18]) {
+        for (const z of [-.47,.29]) {
+          const leg = new THREE.Group();
+          leg.position.set(x,.42,z);
+          foxPart(leg,orange,[0,-.13,0],[.092,.23,.11]);
+          foxPart(leg,dark,[0,-.29,.045],[.10,.087,.13]);
+          paws.push(leg);
+          islandFox.add(leg);
+        }
+      }
+      islandFox.userData = { tail, paws };
+      islandGroup.add(islandFox);
+    }
+
+    function animateIslandTravelers(seconds) {
+      const angle = seconds * .52;
+      const stride = Math.sin(seconds * 9);
+      const foxAngle = angle - .60;
+      littlePrince.position.set(5.95 + Math.cos(angle)*1.85,.16 + Math.abs(stride)*.095,2.18 + Math.sin(angle)*1.85);
+      littlePrince.rotation.y = -angle;
+      const { leftLeg, rightLeg, leftArmPivot, rightArmPivot, headGroup, ribbon } = littlePrince.userData;
+      leftLeg.position.z = stride*.25;
+      rightLeg.position.z = -stride*.25;
+      leftArmPivot.rotation.x = -stride*.42;
+      rightArmPivot.rotation.x = stride*.42;
+      headGroup.rotation.x = -.21;
+      ribbon.rotation.y = .25 + Math.sin(seconds*5)*.25;
+      ribbon.rotation.z = .12 + Math.sin(seconds*4)*.12;
+      islandFox.position.set(5.95 + Math.cos(foxAngle)*1.85,.14 + Math.abs(stride)*.045,2.18 + Math.sin(foxAngle)*1.85);
+      islandFox.rotation.y = -foxAngle;
+      const { tail, paws } = islandFox.userData;
+      tail.rotation.y = Math.sin(seconds*6)*.37;
+      paws.forEach((leg,i) => leg.rotation.x = stride * (i === 0 || i === 3 ? .39 : -.39));
+    }
+
     function initThreeScene() {
       const container = document.getElementById('canvas-container');
       const width = container.clientWidth;
@@ -2313,13 +2446,14 @@
       const gemMat = new THREE.MeshStandardMaterial({
         color: 0x818cf8,
         emissive: 0x6366f1,
-        emissiveIntensity: 0.5,
-        roughness: 0.15,
-        metalness: 0.3
+        emissiveIntensity: 0.24,
+        roughness: 0.88,
+        metalness: 0
       });
       treeGem = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 32), gemMat);
-      treeGem.scale.set(1, 1.25, 1);
+      treeGem.scale.set(1.19, 1, 1.13);
       treeGem.position.set(0, 14.2, 0);
+      decorateB612(treeGem);
       islandGroup.add(treeGem);
 
       gemHalo = new THREE.Mesh(
@@ -2473,6 +2607,7 @@
       islandMonkey=createIslandMonkey();
       islandMonkey.scale.setScalar(0.7);
       islandGroup.add(islandMonkey);
+      addIslandTravelers();
       setupOcean();
       setupIslandEnvironment();
       rainbowCat = createRainbowCat();
@@ -2544,7 +2679,7 @@
       const t = Date.now() * 0.0025;
 
       if (treeGem) {
-        treeGem.rotation.y += 0.015;
+        treeGem.rotation.y += 0.004;
         treeGem.position.y = 14.2 + Math.sin(t * 1.4) * 0.35;
       }
       if (gemHalo) {
@@ -2616,6 +2751,7 @@
       animatePondFish(performance.now() / 1000);
       animateIslandEnvironment(performance.now() / 1000);
       animateIslandMonkey(performance.now() / 1000);
+      animateIslandTravelers(performance.now() / 1000);
       animateRainbowCat(performance.now() / 1000);
       animateOcean(performance.now() / 1000);
       renderer.render(scene, camera);
