@@ -2303,10 +2303,11 @@
     }
 
     function animateIslandTravelers(seconds) {
-      const angle = seconds * .52;
+      const orbitRadius = 11.9;
+      const angle = seconds * .145;
       const stride = Math.sin(seconds * 9);
-      const foxAngle = angle - .60;
-      littlePrince.position.set(5.95 + Math.cos(angle)*1.85,.16 + Math.abs(stride)*.095,2.18 + Math.sin(angle)*1.85);
+      const foxAngle = angle - .18;
+      littlePrince.position.set(Math.cos(angle) * orbitRadius, .16 + Math.abs(stride) * .095, Math.sin(angle) * orbitRadius);
       littlePrince.rotation.y = -angle;
       const { leftLeg, rightLeg, leftArmPivot, rightArmPivot, headGroup, ribbon } = littlePrince.userData;
       leftLeg.position.z = stride*.25;
@@ -2316,7 +2317,7 @@
       headGroup.rotation.x = -.21;
       ribbon.rotation.y = .25 + Math.sin(seconds*5)*.25;
       ribbon.rotation.z = .12 + Math.sin(seconds*4)*.12;
-      islandFox.position.set(5.95 + Math.cos(foxAngle)*1.85,.14 + Math.abs(stride)*.045,2.18 + Math.sin(foxAngle)*1.85);
+      islandFox.position.set(Math.cos(foxAngle) * orbitRadius, .14 + Math.abs(stride) * .045, Math.sin(foxAngle) * orbitRadius);
       islandFox.rotation.y = -foxAngle;
       const { tail, paws } = islandFox.userData;
       tail.rotation.y = Math.sin(seconds*6)*.37;
