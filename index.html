@@ -1512,7 +1512,8 @@
       rainbowCat.material.map=data.textures[Math.floor(seconds*7)%4][facingLeft];
     }
 
-    let islandLion, foxFollower;
+    let islandLion;
+    let foxFollowers = [];
     const kidGreetings = ['👋 嗨～很高興見到你！','😊 今天也一起慢慢來吧。','🌈 每一種心情都可以來島上。','✨ 送你一點小小的勇氣！','😄 哈囉！要一起散步嗎？','🌻 謝謝你來陪我！','💛 累了就休息一下吧。','🙌 擊掌！你今天辛苦了！','🦁 你有看到島上的小獅子嗎？','🥰 很開心和你一起待在島上。','😎 耶！我們又見面了！','🍀 願你今天遇到一件舒服的小事。'];
     function createIslandLion() {
       const lion = new THREE.Group();
@@ -1529,12 +1530,18 @@
         parent.add(mesh);
         return mesh;
       }
-      tuft(lion, gold, [0,.58,-.26], [.48,.61,.66]);
-      tuft(lion, cream, [0,.64,.19], [.33,.53,.31]);
-      for (const side of [-1,1]) {
-        tuft(lion, gold, [side*.35,.27,-.44], [.29,.28,.42]);
-        tuft(lion, gold, [side*.24,.36,.37], [.14,.36,.16]);
-        tuft(lion, cream, [side*.24,.12,.47], [.17,.13,.24]);
+      tuft(lion, gold, [0,.76,-.28], [.43,.40,.72]);
+      tuft(lion, cream, [0,.75,.21], [.31,.42,.33]);
+      const legs = [];
+      for (const x of [-.27, .27]) {
+        for (const z of [-.63, .36]) {
+          const leg = new THREE.Group();
+          leg.position.set(x, .59, z);
+          tuft(leg, gold, [0,-.19,0], [.145,.30,.16]);
+          tuft(leg, cream, [0,-.48,.06], [.165,.115,.21]);
+          legs.push(leg);
+          lion.add(leg);
+        }
       }
       const head = new THREE.Group();
       head.position.set(0,1.23,.26);
@@ -1553,7 +1560,7 @@
       }
       tuft(head, dark, [0,-.055,.598], [.079,.048,.041]);
       const tail = new THREE.Group();
-      tail.position.set(.26,.29,-.58);
+      tail.position.set(.12,.81,-.83);
       const curve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(), new THREE.Vector3(.39,-.13,-.28),
         new THREE.Vector3(.69,-.03,-.25), new THREE.Vector3(.73,.22,-.12)
@@ -1561,12 +1568,17 @@
       tail.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 18, .055, 8, false), gold));
       tuft(tail, mane, [.73,.25,-.12], [.115,.16,.10]);
       lion.add(tail);
-      lion.userData = { head, tail };
+      lion.userData = { head, tail, legs };
       return lion;
     }
 
     function animateIslandLion(seconds) {
-      const { head, tail } = islandLion.userData;
+      const angle = seconds * .21;
+      const step = Math.sin(seconds * 8);
+      islandLion.position.set(2.6 + Math.cos(angle) * 6.25, .12 + Math.abs(step) * .055, -2.4 + Math.sin(angle) * 6.25);
+      islandLion.rotation.y = -angle;
+      const { head, tail, legs } = islandLion.userData;
+      legs.forEach((leg, index) => leg.rotation.x = step * (index === 0 || index === 3 ? .38 : -.38));
       head.rotation.y = Math.sin(seconds * .9) * .17;
       tail.rotation.y = Math.sin(seconds * 1.9) * .23;
     }
@@ -2370,18 +2382,18 @@
       ribbon.rotation.z = .12 + Math.sin(seconds*4)*.12;
       islandFox.position.set(Math.cos(foxAngle) * orbitRadius, .14 + Math.abs(stride) * .045, Math.sin(foxAngle) * orbitRadius);
       islandFox.rotation.y = -foxAngle;
-      if (foxFollower) {
-        const followerAngle = foxAngle - .21;
-        const step = Math.sin(seconds * 9 + 1.3);
-        const { leftLeg, rightLeg, leftArmPivot, rightArmPivot, headGroup } = foxFollower.userData;
-        foxFollower.position.set(Math.cos(followerAngle) * orbitRadius, .16 + Math.abs(step) * .095, Math.sin(followerAngle) * orbitRadius);
-        foxFollower.rotation.y = -followerAngle;
+      foxFollowers.forEach((student, index) => {
+        const followerAngle = foxAngle - .21 - index * .205;
+        const step = Math.sin(seconds * 9 + 1.3 + index * .72);
+        const { leftLeg, rightLeg, leftArmPivot, rightArmPivot, headGroup } = student.userData;
+        student.position.set(Math.cos(followerAngle) * orbitRadius, .16 + Math.abs(step) * .095, Math.sin(followerAngle) * orbitRadius);
+        student.rotation.y = -followerAngle;
         leftLeg.position.z = step * .25;
         rightLeg.position.z = -step * .25;
         leftArmPivot.rotation.x = -step * .42;
         rightArmPivot.rotation.x = step * .42;
         headGroup.rotation.x = -.21;
-      }
+      });
       const { tail, paws } = islandFox.userData;
       tail.rotation.y = Math.sin(seconds*6)*.37;
       paws.forEach((leg,i) => leg.rotation.x = stride * (i === 0 || i === 3 ? .39 : -.39));
@@ -2669,10 +2681,12 @@
       });
 
       islandLion = createIslandLion();
-      islandLion.position.set(7.1, .15, 3.8);
-      islandLion.rotation.y = -.43;
       islandGroup.add(islandLion);
-      foxFollower = kidsGroup.find(kid => kid.userData.student.id === 's_803_1');
+      const studentsOnIsland = kidsGroup.filter(kid => !kid.userData.seated);
+      foxFollowers = [
+        ...studentsOnIsland.filter(kid => kid.userData.student.id === 's_803_1'),
+        ...studentsOnIsland.filter(kid => kid.userData.student.id !== 's_803_1')
+      ];
       addIslandTravelers();
       setupOcean();
       setupIslandEnvironment();
@@ -2754,7 +2768,7 @@
       }
 
       kidsGroup.forEach((kid) => {
-        if (kid === foxFollower) return;
+        if (foxFollowers.includes(kid)) return;
         const u = kid.userData;
         const p = t * 2.2 + u.phase;
         if (u.seated) {
