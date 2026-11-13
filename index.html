@@ -1512,61 +1512,65 @@
       rainbowCat.material.map=data.textures[Math.floor(seconds*7)%4][facingLeft];
     }
 
-    let islandMonkey = null;
-    const kidGreetings = ['👋 嗨～很高興見到你！','😊 今天也一起慢慢來吧。','🌈 每一種心情都可以來島上。','✨ 送你一點小小的勇氣！','😄 哈囉！要一起散步嗎？','🌻 謝謝你來陪我！','💛 累了就休息一下吧。','🙌 擊掌！你今天辛苦了！','🐵 你有看到島上的小猴子嗎？','🥰 很開心和你一起待在島上。','😎 耶！我們又見面了！','🍀 願你今天遇到一件舒服的小事。'];
-    function createIslandMonkey() {
-      const monkey=new THREE.Group();
-      const brown=new THREE.MeshStandardMaterial({color:0x975326,roughness:0.65});
-      const light=new THREE.MeshStandardMaterial({color:0xffcf9b,roughness:0.6});
-      const dark=new THREE.MeshBasicMaterial({color:0x28190f});
-      const white=new THREE.MeshBasicMaterial({color:0xffffff});
-      const pink=new THREE.MeshStandardMaterial({color:0xf6a27d,roughness:0.65});
-      function ball(parent,r,mat,x,y,z,sx=1,sy=1,sz=1){const mesh=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),mat);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);mesh.castShadow=true;parent.add(mesh);return mesh;}
-      ball(monkey,0.55,brown,0,0.89,0,0.9,1.1,0.85);
-      ball(monkey,0.34,light,0,0.87,0.42,0.8,1,0.23);
-      const head=new THREE.Group();head.position.set(0,1.8,0);monkey.add(head);
-      ball(head,0.72,brown,0,0,0,1,0.95,0.86);
-      for(const side of [-1,1]){
-        ball(head,0.29,brown,side*0.7,0,0,1,1,0.6);
-        ball(head,0.20,light,side*0.72,0,0.16,1,1,0.4);
-        ball(head,0.38,light,side*0.23,-0.04,0.47,1,1.12,0.55);
+    let islandLion, foxFollower;
+    const kidGreetings = ['👋 嗨～很高興見到你！','😊 今天也一起慢慢來吧。','🌈 每一種心情都可以來島上。','✨ 送你一點小小的勇氣！','😄 哈囉！要一起散步嗎？','🌻 謝謝你來陪我！','💛 累了就休息一下吧。','🙌 擊掌！你今天辛苦了！','🦁 你有看到島上的小獅子嗎？','🥰 很開心和你一起待在島上。','😎 耶！我們又見面了！','🍀 願你今天遇到一件舒服的小事。'];
+    function createIslandLion() {
+      const lion = new THREE.Group();
+      const sphere = new THREE.SphereGeometry(1, 18, 14);
+      const gold = new THREE.MeshStandardMaterial({ color: 0xf3ad46, roughness: .74 });
+      const mane = new THREE.MeshStandardMaterial({ color: 0xcf692b, roughness: .83 });
+      const amber = new THREE.MeshStandardMaterial({ color: 0xe58a34, roughness: .8 });
+      const cream = new THREE.MeshStandardMaterial({ color: 0xffdf9f, roughness: .76 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x482934, roughness: .65 });
+      function tuft(parent, material, position, scale) {
+        const mesh = new THREE.Mesh(sphere, material);
+        mesh.position.set(...position);
+        mesh.scale.set(...scale);
+        parent.add(mesh);
+        return mesh;
       }
-      ball(head,0.48,light,0,-0.29,0.48,1,0.7,0.6);
-      for(const side of [-1,1]){
-        ball(head,0.13,dark,side*0.25,0.02,0.7,1,1.15,0.5);
-        ball(head,0.043,white,side*0.25+0.035,0.075,0.763,1,1,0.6);
-        ball(head,0.08,pink,side*0.39,-0.23,0.7,1.2,0.6,0.2);
-        ball(head,0.025,dark,side*0.055,-0.22,0.77,1,1.2,0.6);
+      tuft(lion, gold, [0,.58,-.26], [.48,.61,.66]);
+      tuft(lion, cream, [0,.64,.19], [.33,.53,.31]);
+      for (const side of [-1,1]) {
+        tuft(lion, gold, [side*.35,.27,-.44], [.29,.28,.42]);
+        tuft(lion, gold, [side*.24,.36,.37], [.14,.36,.16]);
+        tuft(lion, cream, [side*.24,.12,.47], [.17,.13,.24]);
       }
-      const smile=new THREE.Mesh(new THREE.TorusGeometry(0.115,0.025,8,18,Math.PI),dark);
-      smile.rotation.x=Math.PI;smile.position.set(0,-0.33,0.77);head.add(smile);
-      const arms=[],legs=[];
-      for(const side of [-1,1]){
-        const arm=new THREE.Group();arm.position.set(side*0.46,1.16,0);monkey.add(arm);
-        const limb=createRoundedLimb(0.12,0.54,brown);limb.position.y=-0.24;arm.add(limb);
-        ball(arm,0.16,light,0,-0.53,0.02,1,1,0.85);arms.push(arm);
-        const leg=new THREE.Group();leg.position.set(side*0.25,0.46,0);monkey.add(leg);
-        const shin=createRoundedLimb(0.14,0.35,brown);shin.position.y=-0.12;leg.add(shin);
-        ball(leg,0.19,light,0,-0.28,0.12,1,0.65,1.4);legs.push(leg);
+      const head = new THREE.Group();
+      head.position.set(0,1.23,.26);
+      lion.add(head);
+      tuft(head, mane, [0,-.01,-.09], [.62,.68,.40]);
+      for (let i = 0; i < 10; i++) {
+        const angle = i * Math.PI / 5;
+        tuft(head, i % 2 ? mane : amber, [Math.cos(angle)*.48,Math.sin(angle)*.52,-.02], [.23,.29,.28]).rotation.z = angle - Math.PI/2;
       }
-      const tail=new THREE.Group();monkey.add(tail);
-      const curve=new THREE.CatmullRomCurve3([[0,0.65,-0.35],[0,0.7,-0.85],[0.45,1.05,-1.1],[0.7,1.4,-1],[0.48,1.58,-0.95],[0.26,1.4,-0.95],[0.4,1.24,-1]].map(v=>new THREE.Vector3(...v)));
-      tail.add(new THREE.Mesh(new THREE.TubeGeometry(curve,40,0.085,8,false),brown));
-      monkey.userData={head,arms,legs,tail};return monkey;
+      tuft(head, gold, [0,.06,.22], [.42,.43,.34]);
+      for (const side of [-1,1]) {
+        tuft(head, gold, [side*.35,.35,.19], [.145,.16,.10]);
+        tuft(head, cream, [side*.35,.35,.28], [.087,.091,.04]);
+        tuft(head, dark, [side*.17,.13,.519], [.048,.062,.033]);
+        tuft(head, cream, [side*.105,-.11,.494], [.145,.115,.113]);
+      }
+      tuft(head, dark, [0,-.055,.598], [.079,.048,.041]);
+      const tail = new THREE.Group();
+      tail.position.set(.26,.29,-.58);
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(), new THREE.Vector3(.39,-.13,-.28),
+        new THREE.Vector3(.69,-.03,-.25), new THREE.Vector3(.73,.22,-.12)
+      ]);
+      tail.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 18, .055, 8, false), gold));
+      tuft(tail, mane, [.73,.25,-.12], [.115,.16,.10]);
+      lion.add(tail);
+      lion.userData = { head, tail };
+      return lion;
     }
-    function animateIslandMonkey(seconds) {
-      if(!islandMonkey)return;
-      const angle=seconds*0.22, stride=seconds*7.2, data=islandMonkey.userData;
-      const hop=Math.abs(Math.sin(stride)),landing=Math.pow(1-hop,4);
-      islandMonkey.position.set(Math.cos(angle)*7.6,0.1+hop*0.34,Math.sin(angle)*7.3);
-      islandMonkey.rotation.y=Math.atan2(-Math.sin(angle)*7.6,Math.cos(angle)*7.3);
-      islandMonkey.rotation.z=Math.sin(stride*0.5)*0.07;
-      islandMonkey.scale.set(0.7*(1+landing*0.05),0.7*(1-landing*0.1),0.7*(1+landing*0.05));
-      data.legs.forEach((leg,i)=>leg.rotation.x=Math.sin(stride+i*Math.PI)*0.65);
-      data.arms.forEach((arm,i)=>{arm.rotation.x=-Math.sin(stride+i*Math.PI)*0.48;arm.rotation.z=(i?1:-1)*(0.12+hop*0.24);});
-      data.tail.rotation.y=Math.sin(seconds*4)*0.25;data.tail.rotation.x=Math.sin(stride)*0.09;
-      data.head.rotation.z=Math.sin(seconds*2.2)*0.065;data.head.rotation.x=-hop*0.07;
+
+    function animateIslandLion(seconds) {
+      const { head, tail } = islandLion.userData;
+      head.rotation.y = Math.sin(seconds * .9) * .17;
+      tail.rotation.y = Math.sin(seconds * 1.9) * .23;
     }
+
     const avatarHairStyles = ['short', 'bun', 'twintails', 'bob', 'swept', 'curly', 'pony', 'long', 'braids'];
     const avatarOutfits = ['tee', 'dress', 'overalls', 'hoodie', 'jacket', 'sailor'];
     const avatarColors = {
@@ -2366,6 +2370,18 @@
       ribbon.rotation.z = .12 + Math.sin(seconds*4)*.12;
       islandFox.position.set(Math.cos(foxAngle) * orbitRadius, .14 + Math.abs(stride) * .045, Math.sin(foxAngle) * orbitRadius);
       islandFox.rotation.y = -foxAngle;
+      if (foxFollower) {
+        const followerAngle = foxAngle - .21;
+        const step = Math.sin(seconds * 9 + 1.3);
+        const { leftLeg, rightLeg, leftArmPivot, rightArmPivot, headGroup } = foxFollower.userData;
+        foxFollower.position.set(Math.cos(followerAngle) * orbitRadius, .16 + Math.abs(step) * .095, Math.sin(followerAngle) * orbitRadius);
+        foxFollower.rotation.y = -followerAngle;
+        leftLeg.position.z = step * .25;
+        rightLeg.position.z = -step * .25;
+        leftArmPivot.rotation.x = -step * .42;
+        rightArmPivot.rotation.x = step * .42;
+        headGroup.rotation.x = -.21;
+      }
       const { tail, paws } = islandFox.userData;
       tail.rotation.y = Math.sin(seconds*6)*.37;
       paws.forEach((leg,i) => leg.rotation.x = stride * (i === 0 || i === 3 ? .39 : -.39));
@@ -2652,9 +2668,11 @@
         cloudsGroup.push(cloud);
       });
 
-      islandMonkey=createIslandMonkey();
-      islandMonkey.scale.setScalar(0.7);
-      islandGroup.add(islandMonkey);
+      islandLion = createIslandLion();
+      islandLion.position.set(7.1, .15, 3.8);
+      islandLion.rotation.y = -.43;
+      islandGroup.add(islandLion);
+      foxFollower = kidsGroup.find(kid => kid.userData.student.id === 's_803_1');
       addIslandTravelers();
       setupOcean();
       setupIslandEnvironment();
@@ -2736,6 +2754,7 @@
       }
 
       kidsGroup.forEach((kid) => {
+        if (kid === foxFollower) return;
         const u = kid.userData;
         const p = t * 2.2 + u.phase;
         if (u.seated) {
@@ -2798,7 +2817,7 @@
 
       animatePondFish(performance.now() / 1000);
       animateIslandEnvironment(performance.now() / 1000);
-      animateIslandMonkey(performance.now() / 1000);
+      animateIslandLion(performance.now() / 1000);
       animateIslandTravelers(performance.now() / 1000);
       animateRainbowCat(performance.now() / 1000);
       animateOcean(performance.now() / 1000);
