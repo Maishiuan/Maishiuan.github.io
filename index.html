@@ -147,6 +147,21 @@
       .weather-pickers select { padding:5px 6px; font-size:14px !important; }
     }
     @media(min-width:641px) and (max-height:500px) { #app-header #environment-controls { grid-column:1 / -1; grid-row:2; } }
+    #prince-greeting {
+      position: absolute;
+      z-index: 2;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      padding: 7px 13px;
+      border: 1px solid #f9d77b;
+      border-radius: 16px;
+      background: #fff9e9;
+      color: #684626;
+      box-shadow: 0 4px 14px #382a4126;
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body class="bg-sky-100 text-slate-800 overflow-hidden w-screen h-screen relative">
@@ -154,6 +169,7 @@
   <!-- 3D 渲染畫布容器 -->
   <div id="canvas-container" class="absolute inset-0 z-0">
     <button id="avatar-launch" type="button" hidden>🎨 小人換裝</button>
+    <div id="prince-greeting" role="status" hidden></div>
   </div>
 
   <dialog id="avatar-dialog" class="rounded-3xl bg-white p-4 text-slate-800 shadow-xl" aria-labelledby="avatar-title">
@@ -1740,7 +1756,8 @@
 
     function setupAvatarInteraction(dom) {
       const ray=new THREE.Raycaster(),mouse=new THREE.Vector2(),head=new THREE.Vector3();let down=null;
-      const kidOf=object=>{while(object&&object!==islandGroup){if(kidsGroup.includes(object))return object;object=object.parent;}return null;};
+      const tappableCharacters = [...kidsGroup, littlePrince];
+      const kidOf=object=>{while(object&&object!==islandGroup){if(tappableCharacters.includes(object))return object;object=object.parent;}return null;};
       dom.addEventListener('pointerdown',event=>{if(event.isPrimary!==false&&event.button===0)down={id:event.pointerId,x:event.clientX,y:event.clientY,moved:false};});
       dom.addEventListener('pointermove',event=>{if(down&&Math.hypot(event.clientX-down.x,event.clientY-down.y)>9)down.moved=true;});
       dom.addEventListener('pointercancel',()=>down=null);
@@ -1761,7 +1778,7 @@
         let selected=hits.length?kidOf(hits[0].object):null;
         if(!selected){
           let closest=event.pointerType==='touch'?28:18;
-          for(const kid of kidsGroup){
+          for(const kid of tappableCharacters){
             kid.localToWorld(head.set(0,1.65,0));head.project(camera);
             if(head.z< -1||head.z>1)continue;
             const distance=Math.hypot(bounds.left+(head.x+1)*bounds.width/2-event.clientX,bounds.top+(1-head.y)*bounds.height/2-event.clientY);
@@ -1770,7 +1787,8 @@
             if(hits.length&&kidOf(hits[0].object)===kid){selected=kid;closest=distance;}
           }
         }
-        if(selected)openAvatarDialog(selected);
+        if (selected === littlePrince) greetLittlePrince();
+        else if (selected) openAvatarDialog(selected);
       });
     }
 
@@ -2365,6 +2383,41 @@
       islandGroup.add(islandFox);
     }
 
+    const princeGreetings = ['嗨，很高興見到你！', '(｡•̀ᴗ-)✧', '一起散步吧！', '٩(ˊᗜˋ*)و', '送你一朵玫瑰 🌹', '(˶ᵔ ᵕ ᵔ˶)'];
+    const princeGreetingAnchor = new THREE.Vector3();
+    const princeGreetingBubble = document.getElementById('prince-greeting');
+    let princeGreetingEnds = 0;
+    let princeGreetingIndex = -1;
+
+    function greetLittlePrince() {
+      const offset = 1 + Math.floor(Math.random() * (princeGreetings.length - 1));
+      princeGreetingIndex = (princeGreetingIndex + offset) % princeGreetings.length;
+      princeGreetingBubble.textContent = princeGreetings[princeGreetingIndex];
+      princeGreetingBubble.hidden = false;
+      princeGreetingEnds = performance.now() / 1000 + 2.8;
+      playSoundEffect('click');
+    }
+
+    function updatePrinceGreeting(seconds) {
+      if (princeGreetingBubble.hidden) return;
+      if (seconds >= princeGreetingEnds) {
+        princeGreetingBubble.hidden = true;
+        return;
+      }
+      littlePrince.localToWorld(princeGreetingAnchor.set(0, 2.46, 0));
+      princeGreetingAnchor.project(camera);
+      const { x, y, z } = princeGreetingAnchor;
+      const onScreen = Math.abs(x) <= 1 && Math.abs(y) <= 1 && Math.abs(z) <= 1;
+      princeGreetingBubble.style.visibility = onScreen ? 'visible' : 'hidden';
+      if (!onScreen) return;
+      const canvas = renderer.domElement;
+      const margin = princeGreetingBubble.offsetWidth / 2 + 5;
+      const left = THREE.MathUtils.clamp((x + 1) * canvas.clientWidth / 2, margin, canvas.clientWidth - margin);
+      const top = Math.max(princeGreetingBubble.offsetHeight + 5, (1 - y) * canvas.clientHeight / 2);
+      princeGreetingBubble.style.left = left + 'px';
+      princeGreetingBubble.style.top = top + 'px';
+    }
+
     function animateIslandTravelers(seconds) {
       const orbitRadius = 11.9;
       const angle = seconds * .145;
@@ -2377,6 +2430,13 @@
       rightLeg.position.z = -stride*.25;
       leftArmPivot.rotation.x = -stride*.42;
       rightArmPivot.rotation.x = stride*.42;
+      rightArmPivot.rotation.z = -.45;
+      headGroup.rotation.y = 0;
+      if (seconds < princeGreetingEnds && !reduceOceanMotion.matches) {
+        littlePrince.rotation.y = -islandGroup.rotation.y;
+        rightArmPivot.rotation.x = -.36;
+        rightArmPivot.rotation.z = 2.24 + Math.sin(seconds * 15) * .34;
+      }
       headGroup.rotation.x = -.21;
       ribbon.rotation.y = .25 + Math.sin(seconds*5)*.25;
       ribbon.rotation.z = .12 + Math.sin(seconds*4)*.12;
@@ -2835,6 +2895,7 @@
       animateIslandTravelers(performance.now() / 1000);
       animateRainbowCat(performance.now() / 1000);
       animateOcean(performance.now() / 1000);
+      updatePrinceGreeting(performance.now() / 1000);
       renderer.render(scene, camera);
     }
 
